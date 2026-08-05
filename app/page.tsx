@@ -32,8 +32,8 @@ export default function Home() {
           {navigation.map(([label, href]) => <a key={href} href={href}>{label}</a>)}
         </div>
         <div className="nav-actions">
-          <a className="sign-in" href="#get-started">Sign in</a>
-          <a className="button button-small" href="#get-started">Get started</a>
+          <a className="sign-in" href="/dashboard" aria-label="Preview the AWN dashboard">Sign in</a>
+          <a className="button button-small" href="/onboarding">Get started</a>
         </div>
         <button
           className="menu-toggle"
@@ -47,8 +47,8 @@ export default function Home() {
         </button>
         <div className={`menu-panel${menuOpen ? " is-open" : ""}`} id="mobile-menu" hidden={!menuOpen}>
           {navigation.map(([label, href]) => <a key={href} href={href} onClick={closeMenu}>{label}</a>)}
-          <a href="#get-started" onClick={closeMenu}>Sign in</a>
-          <a className="menu-cta" href="#get-started" onClick={closeMenu}>Get started <span aria-hidden="true">↗</span></a>
+          <a href="/dashboard" aria-label="Preview the AWN dashboard" onClick={closeMenu}>Sign in</a>
+          <a className="menu-cta" href="/onboarding" onClick={closeMenu}>Get started <span aria-hidden="true">↗</span></a>
         </div>
       </nav>
 
@@ -58,7 +58,7 @@ export default function Home() {
           <h1>Know where your money is going.<br />Know what to do next.</h1>
           <p className="hero-lede">AWN turns everyday financial activity into one clear monthly plan—so you can spend confidently, prepare for what&apos;s ahead, and save with purpose.</p>
           <div className="hero-actions">
-            <a className="button" href="#get-started">Start with AWN <span aria-hidden="true">↗</span></a>
+            <a className="button" href="/onboarding">Start with AWN <span aria-hidden="true">↗</span></a>
             <a className="text-link" href="#how-it-works">See how it works <span aria-hidden="true">↓</span></a>
           </div>
         </div>
@@ -111,8 +111,8 @@ export default function Home() {
         <div className="principles"><article><span className="principle-mark">↘</span><h3>Clarity over complexity</h3><p>Useful information, given the space to make sense.</p></article><article><span className="principle-mark">≈</span><h3>Honesty over certainty</h3><p>A grounded view of today, with room for real life.</p></article><article><span className="principle-mark">◌</span><h3>Help before profit</h3><p>Support for better decisions, at the moment it matters.</p></article></div>
       </section>
 
-      <section className="final-cta section-shell" id="get-started"><div><p className="eyebrow">Start with a clearer month</p><h2>Make room for<br />what&apos;s next.</h2></div><a className="button button-light" href="#top">Start with AWN <span aria-hidden="true">↗</span></a></section>
-      <footer className="footer section-shell"><a className="wordmark footer-mark" href="#top"><span className="wordmark-mark" aria-hidden="true">a</span><span>awn</span></a><p>Money, with more perspective.</p><div><a href="#how-it-works">How it works</a><a href="#approach">Our approach</a><a href="#get-started">Get started</a></div></footer>
+      <section className="final-cta section-shell" id="get-started"><div><p className="eyebrow">Start with a clearer month</p><h2>Make room for<br />what&apos;s next.</h2></div><a className="button button-light" href="/onboarding">Start with AWN <span aria-hidden="true">↗</span></a></section>
+      <footer className="footer section-shell"><a className="wordmark footer-mark" href="#top"><span className="wordmark-mark" aria-hidden="true">a</span><span>awn</span></a><p>Money, with more perspective.</p><div><a href="#how-it-works">How it works</a><a href="#approach">Our approach</a><a href="/onboarding">Get started</a></div></footer>
     </main>
   );
 }
