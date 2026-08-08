@@ -1,31 +1,25 @@
-import { currencies, FINANCIAL_PROFILE_VERSION, type FinancialProfile } from "@/lib/financial-types";
+import type { FinancialProfile } from "@/lib/financial-types";
+import { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage } from "@/lib/financial-storage-core";
 
-export const FINANCIAL_STORAGE_KEY = "awn.financial-profile.v1";
+export { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage };
 type LoadResult = { profile: FinancialProfile | null; issue: string | null };
-
-function isProfile(value: unknown): value is FinancialProfile {
-  if (!value || typeof value !== "object") return false;
-  const profile = value as Record<string, unknown>;
-  const isObject = (item: unknown) => !!item && typeof item === "object";
-  const isMoney = (item: unknown) => typeof item === "number" && Number.isSafeInteger(item);
-  const isDay = (item: unknown) => typeof item === "number" && Number.isInteger(item) && item >= 1 && item <= 31;
-  const named = (item: unknown) => isObject(item) && typeof (item as Record<string, unknown>).id === "string" && typeof (item as Record<string, unknown>).name === "string";
-  return profile.version === FINANCIAL_PROFILE_VERSION && currencies.includes(profile.currency as (typeof currencies)[number]) && Array.isArray(profile.incomeSources) && profile.incomeSources.every((item) => named(item) && isMoney((item as Record<string, unknown>).amount) && isDay((item as Record<string, unknown>).day)) && Array.isArray(profile.accounts) && profile.accounts.every((item) => named(item) && isMoney((item as Record<string, unknown>).balance)) && Array.isArray(profile.creditCards) && profile.creditCards.every((item) => named(item) && isMoney((item as Record<string, unknown>).limit) && isMoney((item as Record<string, unknown>).owed) && isDay((item as Record<string, unknown>).dueDay)) && Array.isArray(profile.categoryBudgets) && profile.categoryBudgets.every((item) => named(item) && isMoney((item as Record<string, unknown>).limit)) && Array.isArray(profile.savingsGoals) && profile.savingsGoals.every((item) => named(item) && isMoney((item as Record<string, unknown>).target) && isMoney((item as Record<string, unknown>).saved) && isMoney((item as Record<string, unknown>).contribution)) && isObject(profile.onboarding) && typeof (profile.onboarding as Record<string, unknown>).completed === "boolean" && typeof (profile.onboarding as Record<string, unknown>).currentStep === "number";
-}
 
 export function loadFinancialProfile(): LoadResult {
   if (typeof window === "undefined") return { profile: null, issue: null };
   try {
     const raw = window.localStorage.getItem(FINANCIAL_STORAGE_KEY);
-    if (!raw) return { profile: null, issue: null };
-    const parsed: unknown = JSON.parse(raw);
-    return isProfile(parsed) ? { profile: parsed, issue: null } : { profile: null, issue: "Your saved plan cannot be read. You can reset it and start again." };
+    if (raw) { const parsed: unknown = JSON.parse(raw); return isFinancialProfile(parsed) ? { profile: parsed as FinancialProfile, issue: null } : { profile: null, issue: "Your saved plan cannot be read. You can reset it and start again." }; }
+    const legacyRaw = window.localStorage.getItem(LEGACY_FINANCIAL_STORAGE_KEY);
+    if (!legacyRaw) return { profile: null, issue: null };
+    const migrated = migrateLegacyProfile(JSON.parse(legacyRaw));
+    if (!migrated) return { profile: null, issue: "Your saved plan cannot be read. You can reset it and start again." };
+    window.localStorage.setItem(FINANCIAL_STORAGE_KEY, JSON.stringify(migrated));
+    const verified: unknown = JSON.parse(window.localStorage.getItem(FINANCIAL_STORAGE_KEY) ?? "null");
+    if (!isFinancialProfile(verified)) return { profile: null, issue: "AWN could not safely update your saved plan." };
+    window.localStorage.removeItem(LEGACY_FINANCIAL_STORAGE_KEY);
+    return { profile: verified as FinancialProfile, issue: null };
   } catch { return { profile: null, issue: "Your saved plan cannot be read. You can reset it and start again." }; }
 }
 
-export function saveFinancialProfile(profile: FinancialProfile) {
-  if (typeof window === "undefined") return false;
-  try { window.localStorage.setItem(FINANCIAL_STORAGE_KEY, JSON.stringify(profile)); return true; } catch { return false; }
-}
-
-export function resetFinancialProfile() { if (typeof window !== "undefined") window.localStorage.removeItem(FINANCIAL_STORAGE_KEY); }
+export function saveFinancialProfile(profile: FinancialProfile) { if (typeof window === "undefined") return false; try { window.localStorage.setItem(FINANCIAL_STORAGE_KEY, JSON.stringify(profile)); return true; } catch { return false; } }
+export function resetFinancialProfile() { if (typeof window !== "undefined") resetFinancialStorage(window.localStorage); }
