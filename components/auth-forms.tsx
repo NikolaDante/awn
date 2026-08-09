@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, Suspense, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeReturnPath } from "@/lib/auth/routing";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,14 @@ type Mode = "sign-in" | "sign-up" | "forgot-password" | "reset";
 const callbackUrl = (path: string) => `${window.location.origin}${path}`;
 
 export function AuthForm({ mode }: { mode: Mode }) {
+  return (
+    <Suspense fallback={<main className="auth-page"><section className="auth-card" aria-busy="true"><p className="auth-intro">Loading…</p></section></main>}>
+      <AuthFormContent mode={mode} />
+    </Suspense>
+  );
+}
+
+function AuthFormContent({ mode }: { mode: Mode }) {
   const router = useRouter(); const searchParams = useSearchParams(); const errorRef = useRef<HTMLParagraphElement>(null);
   const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [confirmation, setConfirmation] = useState(""); const [status, setStatus] = useState(""); const [error, setError] = useState(searchParams.get("session") === "invalid" ? "That link has expired or is no longer valid. Please sign in or request a new one." : ""); const [busy, setBusy] = useState(false); const [verificationPending, setVerificationPending] = useState(false);
   const next = safeReturnPath(searchParams.get("next"));
