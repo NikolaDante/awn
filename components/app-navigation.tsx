@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SignOutButton } from "@/components/auth-forms";
 
 const navigation = [
   { href: "/dashboard", label: "Dashboard", mark: "◒" },
@@ -24,7 +25,7 @@ export function AppNavigation() {
         </nav>
         <div className="app-sidebar-footer">
           <button type="button" className="sidebar-placeholder" disabled>Help <span>Coming soon</span></button>
-          <button type="button" className="sidebar-placeholder" disabled>Settings <span>Coming soon</span></button>
+          <SignOutButton />
         </div>
       </aside>
       <nav className="app-bottom-nav" aria-label="Application navigation">
