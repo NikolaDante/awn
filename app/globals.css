@@ -1328,6 +1328,22 @@
   gap:5px;
 }
 
+.summary-row .summary-row-actions {
+  align-items:center;
+  gap:7px;
+}
+
+.summary-row .summary-row-action {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:40px;
+  padding:8px 10px;
+  border-radius:10px;
+  font-size:.75rem;
+  line-height:1;
+}
+
 .empty-summary {
   margin:0;
   padding:18px;
@@ -1352,8 +1368,9 @@
 
 .concept-grid article > span {
   color:#aaa4ff;
-  font-size:.68rem;
-  font-weight:700;
+  font-size:.86rem;
+  font-weight:760;
+  letter-spacing:.05em;
 }
 
 .concept-grid h2 {
@@ -1424,6 +1441,15 @@
 
 .onboarding-page .savings-goal-field-wide {
   grid-column:1/-1;
+}
+
+.onboarding-page input[type="month"] {
+  color-scheme:dark;
+}
+
+.onboarding-page input[type="month"]::-webkit-calendar-picker-indicator {
+  opacity:.82;
+  cursor:pointer;
 }
 
 .review-grid {

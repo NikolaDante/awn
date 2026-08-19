@@ -47,6 +47,16 @@ export function formatTargetMonth(targetDate?: string) {
   return new Date(`${month}-01T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
+export function normalizeBudgetStartDayInput(value: string) {
+  if (!/^\d*$/.test(value)) return null;
+  return value.replace(/^0+(?=\d)/, "").replace(/^0$/, "");
+}
+
+export function parseBudgetStartDayInput(value: string) {
+  if (!/^(?:[1-9]|1\d|2[0-8])$/.test(value)) return undefined;
+  return Number(value);
+}
+
 export function budgetCycle(startDay: number, reference = new Date()) {
   const day = Math.max(1, Math.min(28, Math.trunc(startDay || 1)));
   const today = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());

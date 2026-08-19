@@ -13,7 +13,7 @@ import { formatMoney } from "@/lib/financial-calculations";
 import { financialReferenceMonth } from "@/lib/financial-date";
 import { countryCurrencies, suggestedCurrency } from "@/lib/financial-institutions";
 import { hasLinkedAccountActivity, hasLinkedCardActivity, removalGuardMessage } from "@/lib/financial-reference-guards";
-import { budgetAllocation, formatBudgetCycle, formatTargetMonth, onboardingSteps, removeOnboardingItem, requestedOnboardingStep, upsertOnboardingItem } from "@/lib/onboarding";
+import { budgetAllocation, formatBudgetCycle, formatTargetMonth, normalizeBudgetStartDayInput, onboardingSteps, parseBudgetStartDayInput, removeOnboardingItem, requestedOnboardingStep, upsertOnboardingItem } from "@/lib/onboarding";
 import { currencies, newLocalId, type Account, type CategoryBudget, type CreditCard, type Currency, type DebitCard, type FinancialProfile, type SavingsGoal } from "@/lib/financial-types";
 
 const suggestedCategories = ["Housing", "Utilities", "Groceries", "Transport", "Dining", "Shopping", "Health", "Entertainment", "Family", "Other"];
@@ -24,6 +24,7 @@ export function OnboardingFlow() {
   const router = useRouter();
   const { profile, ready, issue, save } = useFinancialProfile();
   const [draft, setDraft] = useState<FinancialProfile | null>(null);
+  const [budgetStartDayInput, setBudgetStartDayInput] = useState("1");
   const [step, setStep] = useState(0);
   const [errors, setErrors] = useState<Errors>({});
   const [notice, setNotice] = useState("");
@@ -40,6 +41,7 @@ export function OnboardingFlow() {
       const normalized = { ...existing, country: existing.country ?? "United Arab Emirates", budgetStartDay: existing.budgetStartDay ?? 1, debitCards: existing.debitCards ?? [] };
       const requested = requestedOnboardingStep(new URLSearchParams(window.location.search).get("step"), normalized.onboarding.currentStep);
       setDraft(normalized);
+      setBudgetStartDayInput(String(normalized.budgetStartDay ?? 1));
       setStep(requested);
     });
   }, [ready, issue, profile, draft]);
@@ -61,7 +63,9 @@ export function OnboardingFlow() {
     const next: Errors = {};
     if (step === 1) {
       if (!draft.country?.trim()) next.country = "Please choose a country.";
-      if (!Number.isInteger(draft.budgetStartDay) || (draft.budgetStartDay ?? 0) < 1 || (draft.budgetStartDay ?? 0) > 28) next.budgetStartDay = "Choose a budget start day from 1 to 28.";
+      const budgetStartDay = parseBudgetStartDayInput(budgetStartDayInput);
+      if (!budgetStartDay) next.budgetStartDay = "Choose a budget start day from 1 to 28.";
+      else if (draft.budgetStartDay !== budgetStartDay) setDraft((current) => current ? { ...current, budgetStartDay } : current);
     }
     if (step === 4 && !budgetAllocation(draft).total) next.monthlyBudget = "Enter a monthly budget above zero, or choose Skip for now.";
     setErrors(next);
@@ -85,7 +89,7 @@ export function OnboardingFlow() {
       <p className="onboarding-intro">{stepIntro(step)}</p>
       {notice && <p className="form-message is-warning" role="status">{notice}</p>}
       {step === 0 && <Welcome />}
-      {step === 1 && <BasicsStep draft={draft} change={change} errors={errors} />}
+      {step === 1 && <BasicsStep draft={draft} change={change} errors={errors} budgetStartDayInput={budgetStartDayInput} setBudgetStartDayInput={setBudgetStartDayInput} />}
       {step === 2 && <AccountsStep draft={draft} change={change} editor={itemEditor} setEditor={setItemEditor} notice={setNotice} />}
       {step === 3 && <HowAwnWorks />}
       {step === 4 && <BudgetStep draft={draft} change={change} error={errors.monthlyBudget} editor={categoryEditor} setEditor={setCategoryEditor} />}
@@ -117,11 +121,20 @@ function Welcome() {
   return <div className="welcome-content"><aside className="onboarding-info"><strong>Automatic bank linking is coming soon.</strong><p>For now, you can add your accounts and cards manually.</p></aside><div className="privacy-list"><strong>AWN never needs your:</strong><span>Full card number</span><span>PIN or CVV</span><span>Bank password</span><span>Banking login</span></div></div>;
 }
 
-function BasicsStep({ draft, change, errors }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; errors: Errors }) {
+function BasicsStep({ draft, change, errors, budgetStartDayInput, setBudgetStartDayInput }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; errors: Errors; budgetStartDayInput: string; setBudgetStartDayInput: (value: string) => void }) {
   const countries = draft.country && !(draft.country in countryCurrencies) ? [draft.country, ...Object.keys(countryCurrencies)] : Object.keys(countryCurrencies);
   const hasAmounts = draft.accounts.some((item) => item.balance !== 0) || draft.creditCards.some((item) => item.limit || item.owed) || draft.categoryBudgets.some((item) => item.limit) || draft.savingsGoals.some((item) => item.target || item.saved);
   const updateCountry = (country: string) => change({ country, ...(!hasAmounts && suggestedCurrency(country) ? { currency: suggestedCurrency(country) as Currency } : {}) });
-  return <div className="step-content basics-grid"><FormField label="Country" error={errors.country}><select value={draft.country} onChange={(event) => updateCountry(event.target.value)}>{countries.map((country) => <option key={country}>{country}</option>)}</select></FormField><FormField label="Currency" hint={hasAmounts ? "Existing amounts keep their current base currency." : "Suggested from your country; you can change it."}><select value={draft.currency} disabled={hasAmounts} onChange={(event) => change({ currency: event.target.value as Currency })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></FormField><FormField label="When would you like your monthly budget to start?" error={errors.budgetStartDay} hint="Choose a day from 1 to 28 so every month has a valid start date." className="field-wide"><input type="number" min="1" max="28" value={draft.budgetStartDay ?? 1} onChange={(event) => change({ budgetStartDay: Number(event.target.value) })} /></FormField><aside className="onboarding-info field-wide"><strong>Budget around your real month.</strong><p>Some people budget from the 1st. Others start on payday. With day {draft.budgetStartDay ?? 1}, your current cycle is {formatBudgetCycle(draft.budgetStartDay ?? 1)}.</p></aside></div>;
+  const previewDay = parseBudgetStartDayInput(budgetStartDayInput);
+  const updateBudgetStartDay = (value: string) => {
+    const normalized = normalizeBudgetStartDayInput(value);
+    if (normalized !== null) setBudgetStartDayInput(normalized);
+  };
+  const commitBudgetStartDay = () => {
+    const value = parseBudgetStartDayInput(budgetStartDayInput);
+    if (value) change({ budgetStartDay: value });
+  };
+  return <div className="step-content basics-grid"><FormField label="Country" error={errors.country}><select value={draft.country} onChange={(event) => updateCountry(event.target.value)}>{countries.map((country) => <option key={country}>{country}</option>)}</select></FormField><FormField label="Currency" hint={hasAmounts ? "Existing amounts keep their current base currency." : "Suggested from your country; you can change it."}><select value={draft.currency} disabled={hasAmounts} onChange={(event) => change({ currency: event.target.value as Currency })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></FormField><FormField label="When would you like your monthly budget to start?" error={errors.budgetStartDay} hint="Choose a day from 1 to 28 so every month has a valid start date." className="field-wide"><input type="text" inputMode="numeric" pattern="[0-9]*" value={budgetStartDayInput} onChange={(event) => updateBudgetStartDay(event.target.value)} onBlur={commitBudgetStartDay} /></FormField><aside className="onboarding-info field-wide"><strong>Budget around your real month.</strong>{previewDay ? <p>Some people budget from the 1st. Others start on payday. With day {previewDay}, your current cycle is {formatBudgetCycle(previewDay)}.</p> : <p>Some people budget from the 1st. Others start on payday. Enter a day from 1 to 28 to preview your current cycle.</p>}</aside></div>;
 }
 
 function AccountsStep({ draft, change, editor, setEditor, notice }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; editor?: ItemEditor; setEditor: (editor?: ItemEditor) => void; notice: (message: string) => void }) {
@@ -195,7 +208,7 @@ function SummaryGroup({ title, empty, children }: { title?: string; empty: strin
 }
 
 function SummaryRow({ title, detail, edit, remove }: { title: string; detail: string; edit: () => void; remove: () => void }) {
-  return <article className="summary-row"><div><strong>{title}</strong><small>{detail}</small></div><div><button type="button" className="text-button" onClick={edit}>Edit</button><button type="button" className="text-button is-danger" onClick={remove}>Remove</button></div></article>;
+  return <article className="summary-row"><div><strong>{title}</strong><small>{detail}</small></div><div className="summary-row-actions"><button type="button" className="text-button summary-row-action" onClick={edit}>Edit</button><button type="button" className="text-button is-danger summary-row-action" onClick={remove}>Remove</button></div></article>;
 }
 
 function FlowActions({ step, draft, submitting, back, continueStep, skip, complete }: { step: number; draft: FinancialProfile; submitting: boolean; back: () => void; continueStep: () => void; skip: () => void; complete: () => void }) {

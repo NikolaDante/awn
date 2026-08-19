@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { replaceBudgetSnapshot } from "../lib/financial-budget.ts";
 import { debitAccountAvailable } from "../lib/financial-institutions.ts";
-import { authenticatedFinancialRoute, budgetAllocation, budgetCycle, categoryBudgetValid, normalizeSavingsTargetMonth, removeOnboardingItem, requestedOnboardingStep, savingsTargetMonth, upsertOnboardingItem } from "../lib/onboarding.ts";
+import { authenticatedFinancialRoute, budgetAllocation, budgetCycle, categoryBudgetValid, normalizeBudgetStartDayInput, normalizeSavingsTargetMonth, parseBudgetStartDayInput, removeOnboardingItem, requestedOnboardingStep, savingsTargetMonth, upsertOnboardingItem } from "../lib/onboarding.ts";
 import { isFinancialProfile } from "../lib/financial-storage-core.ts";
 import { createFinancialProfile, type Account, type CreditCard, type DebitCard, type SavingsGoal } from "../lib/financial-types.ts";
 
@@ -122,4 +122,22 @@ test("budget cycles support payday starts while constraining recurring days to 2
   assert.deepEqual([first.start.getFullYear(), first.start.getMonth(), first.start.getDate(), first.end.getMonth(), first.end.getDate()], [2026, 7, 1, 7, 31]);
   assert.deepEqual([payday.start.getFullYear(), payday.start.getMonth(), payday.start.getDate(), payday.end.getMonth(), payday.end.getDate()], [2026, 6, 25, 7, 24]);
   assert.equal(budgetCycle(31, reference).start.getDate(), 28);
+});
+
+test("budget start-day editing preserves natural integers and validates only final values", () => {
+  assert.equal(normalizeBudgetStartDayInput(""), "");
+  assert.equal(normalizeBudgetStartDayInput("9"), "9");
+  assert.equal(normalizeBudgetStartDayInput("09"), "9");
+  assert.equal(normalizeBudgetStartDayInput("15"), "15");
+  assert.equal(normalizeBudgetStartDayInput("28"), "28");
+  assert.equal(normalizeBudgetStartDayInput("2x"), null);
+  assert.equal(parseBudgetStartDayInput("9"), 9);
+  assert.equal(parseBudgetStartDayInput("15"), 15);
+  assert.equal(parseBudgetStartDayInput("28"), 28);
+  assert.equal(parseBudgetStartDayInput(""), undefined);
+  assert.equal(parseBudgetStartDayInput("0"), undefined);
+  assert.equal(parseBudgetStartDayInput("29"), undefined);
+  assert.equal(parseBudgetStartDayInput("-1"), undefined);
+  assert.match(onboardingSource, /type="text" inputMode="numeric"/);
+  assert.doesNotMatch(onboardingSource, /Number\(event\.target\.value\)/);
 });
