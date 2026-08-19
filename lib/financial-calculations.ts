@@ -1,5 +1,6 @@
 import { budgetCategoriesForMonth } from "./financial-budget.ts";
 import { financialReferenceMonth } from "./financial-date.ts";
+import { effectiveMonthlyBudget } from "./onboarding.ts";
 import type { Amount, Currency, FinancialProfile, Transaction } from "@/lib/financial-types";
 
 export type FinancialSummary = { expectedIncome: Amount; spendingBudget: Amount; plannedSavings: Amount; plannedAvailable: Amount; remainingToAllocate: Amount; accountCash: Amount; availableCredit: { id: string; name: string; amount: Amount }[] };
@@ -8,7 +9,7 @@ const sum = (values: Amount[]) => values.reduce((total, value) => total + value,
 
 export function calculateFinancialSummary(profile: FinancialProfile, month = financialReferenceMonth(profile)): FinancialSummary {
   const expectedIncome = sum(profile.incomeSources.map((source) => source.amount));
-  const spendingBudget = sum(budgetCategoriesForMonth(profile, month).map((category) => category.limit));
+  const spendingBudget = effectiveMonthlyBudget(profile, month) ?? 0;
   const plannedSavings = sum(profile.savingsGoals.map((goal) => goal.contribution));
   return { expectedIncome, spendingBudget, plannedSavings, plannedAvailable: expectedIncome - plannedSavings, remainingToAllocate: expectedIncome - spendingBudget - plannedSavings, accountCash: sum(profile.accounts.map((account) => account.balance)), availableCredit: profile.creditCards.map((card) => ({ id: card.id, name: card.name, amount: card.limit - card.owed })) };
 }

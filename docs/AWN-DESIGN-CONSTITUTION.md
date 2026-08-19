@@ -781,3 +781,12 @@ Dashboard Desktop v1.0 is the visual reference. Authenticated pages use one sema
 New page-specific styling must consume the frozen AWN typography, spacing and shared component scale before introducing a new size.
 
 Unique components may differ in geometry, but shared semantic roles must remain visually consistent. Reuse the frozen component implementation instead of creating duplicate page-specific styles. Consistency takes priority over visual novelty.
+
+## 24. Onboarding — Frozen Principles
+
+- Give each screen one clear purpose and keep progress visible.
+- Keep Back available after the welcome screen.
+- Optional setup must always be cancellable and skippable without creating placeholder data.
+- Reserve validation-message space so errors do not shift neighboring fields.
+- Collect only information AWN currently uses.
+- Financial accounts and cards are entered manually for now; automatic bank linking must be described as coming soon.

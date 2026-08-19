@@ -2,60 +2,203 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { cloneElement, isValidElement, useEffect, useId, useRef, useState, type ReactElement } from "react";
-import { MoneyInput } from "@/components/money-input";
-import { budgetCategoriesForMonth, replaceBudgetSnapshot } from "@/lib/financial-budget";
-import { calculateFinancialSummary, formatMoney } from "@/lib/financial-calculations";
-import { financialReferenceMonth } from "@/lib/financial-date";
-import { currencies, createFinancialProfile, newLocalId, type Account, type CreditCard, type FinancialProfile, type IncomeSource, type SavingsGoal } from "@/lib/financial-types";
+import { useEffect, useRef, useState } from "react";
+import { FinancialItemForm, type FinancialItem, type FinancialItemKind } from "@/components/financial-item-form";
 import { useFinancialProfile } from "@/components/financial-provider";
+import { FormField } from "@/components/form-field";
+import { MoneyInput } from "@/components/money-input";
+import { SavingsGoalForm } from "@/components/savings-goal-form";
+import { replaceBudgetSnapshot } from "@/lib/financial-budget";
+import { formatMoney } from "@/lib/financial-calculations";
+import { financialReferenceMonth } from "@/lib/financial-date";
+import { countryCurrencies, suggestedCurrency } from "@/lib/financial-institutions";
 import { hasLinkedAccountActivity, hasLinkedCardActivity, removalGuardMessage } from "@/lib/financial-reference-guards";
+import { budgetAllocation, formatBudgetCycle, formatTargetMonth, onboardingSteps, removeOnboardingItem, requestedOnboardingStep, upsertOnboardingItem } from "@/lib/onboarding";
+import { currencies, newLocalId, type Account, type CategoryBudget, type CreditCard, type Currency, type DebitCard, type FinancialProfile, type SavingsGoal } from "@/lib/financial-types";
 
-const stepNames = ["Currency & income", "Accounts & cards", "Category budgets", "Savings goals", "Review & confirm"];
 const suggestedCategories = ["Housing", "Utilities", "Groceries", "Transport", "Dining", "Shopping", "Health", "Entertainment", "Family", "Other"];
 type Errors = Record<string, string>;
-
-const updateAt = <T extends { id: string }>(items: T[], id: string, patch: Partial<T>) => items.map((item) => item.id === id ? { ...item, ...patch } : item);
-const removeAt = <T extends { id: string }>(items: T[], id: string) => items.filter((item) => item.id !== id);
-const incomeItem = (): IncomeSource => ({ id: newLocalId(), name: "", amount: 0, day: 1 });
-const accountItem = (): Account => ({ id: newLocalId(), name: "", type: "current", balance: 0 });
-const cardItem = (): CreditCard => ({ id: newLocalId(), name: "", limit: 0, owed: 0, dueDay: 1 });
-const goalItem = (): SavingsGoal => ({ id: newLocalId(), name: "", target: 0, saved: 0, contribution: 0, priority: 1 });
+type ItemEditor = { kind: FinancialItemKind; item?: FinancialItem };
 
 export function OnboardingFlow() {
-  const router = useRouter(); const { profile, ready, issue, save } = useFinancialProfile();
-  const [draft, setDraft] = useState<FinancialProfile | null>(null); const [step, setStep] = useState(1); const [errors, setErrors] = useState<Errors>({}); const [notice, setNotice] = useState(""); const [submitting, setSubmitting] = useState(false); const heading = useRef<HTMLHeadingElement>(null); const errorBox = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (!ready || draft) return; queueMicrotask(() => { const existing = profile ?? createFinancialProfile(); const params = new URLSearchParams(window.location.search); const names = ["income", "accounts", "budget", "savings", "review"]; const requested = names.indexOf(params.get("step") ?? "") + 1; setDraft(existing); setStep(requested || existing.onboarding.currentStep || 1); }); }, [ready, profile, draft]);
-  useEffect(() => { if (draft) save({ ...draft, onboarding: { ...draft.onboarding, currentStep: step } }); }, [draft, step, save]);
+  const router = useRouter();
+  const { profile, ready, issue, save } = useFinancialProfile();
+  const [draft, setDraft] = useState<FinancialProfile | null>(null);
+  const [step, setStep] = useState(0);
+  const [errors, setErrors] = useState<Errors>({});
+  const [notice, setNotice] = useState("");
+  const [itemEditor, setItemEditor] = useState<ItemEditor>();
+  const [goalEditor, setGoalEditor] = useState<SavingsGoal | null>();
+  const [categoryEditor, setCategoryEditor] = useState<CategoryBudget | null>();
+  const [submitting, setSubmitting] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!ready || issue || draft) return;
+    queueMicrotask(() => {
+      const existing = profile ?? createProfileDefaults();
+      const normalized = { ...existing, country: existing.country ?? "United Arab Emirates", budgetStartDay: existing.budgetStartDay ?? 1, debitCards: existing.debitCards ?? [] };
+      const requested = requestedOnboardingStep(new URLSearchParams(window.location.search).get("step"), normalized.onboarding.currentStep);
+      setDraft(normalized);
+      setStep(requested);
+    });
+  }, [ready, issue, profile, draft]);
+
+  useEffect(() => {
+    if (!draft) return;
+    save({ ...draft, onboarding: { ...draft.onboarding, currentStep: step } });
+  }, [draft, step, save]);
+
   useEffect(() => { heading.current?.focus(); }, [step]);
-  if (!ready || !draft) return <main className="onboarding-page"><p className="loading-copy">Loading your local plan…</p></main>;
+
   if (issue) return <main className="onboarding-page"><section className="onboarding-card"><h1>Your saved plan needs attention.</h1><p>{issue}</p><Link className="app-button app-button-light" href="/dashboard">Return to dashboard</Link></section></main>;
-  const activeBudgetCategories = budgetCategoriesForMonth(draft, financialReferenceMonth(draft));
-  const change = (patch: Partial<FinancialProfile>) => setDraft((current) => current ? { ...current, ...patch } : current);
-  const go = (next: number) => { setErrors({}); setNotice(""); setStep(next); };
-  const validate = () => { const next: Errors = {}; if (step === 1) { if (!draft.incomeSources.length) next.income = "Add at least one expected monthly income source."; draft.incomeSources.forEach((item) => { if (!item.name.trim()) next[`income-${item.id}-name`] = "Add a name for this income source."; if (item.amount <= 0) next[`income-${item.id}-amount`] = "Enter an amount above zero."; if (!Number.isInteger(item.day) || item.day < 1 || item.day > 31) next[`income-${item.id}-day`] = "Use a day from 1 to 31."; }); } if (step === 2) { draft.accounts.forEach((item) => { if (!item.name.trim()) next[`account-${item.id}-name`] = "Add a friendly account name."; if (item.balance < 0) next[`account-${item.id}-balance`] = "Starting balance cannot be negative."; }); draft.creditCards.forEach((item) => { if (!item.name.trim()) next[`card-${item.id}-name`] = "Add a friendly card name."; if (item.limit < 0) next[`card-${item.id}-limit`] = "Credit limit cannot be negative."; if (item.owed < 0) next[`card-${item.id}-owed`] = "Balance owed cannot be negative."; if (item.owed > item.limit) next[`card-${item.id}-owed`] = "Balance owed is higher than this card’s limit. Check the amounts."; if (!Number.isInteger(item.dueDay) || item.dueDay < 1 || item.dueDay > 31) next[`card-${item.id}-day`] = "Use a day from 1 to 31."; }); } if (step === 3) { if (!activeBudgetCategories.length) next.category = "Choose at least one category for your monthly plan."; const seen = new Set<string>(); activeBudgetCategories.forEach((item) => { const name = item.name.trim().toLowerCase(); if (!name) next[`category-${item.id}-name`] = "Add a category name."; if (seen.has(name)) next[`category-${item.id}-name`] = "Use each category only once."; seen.add(name); if (item.limit <= 0) next[`category-${item.id}-limit`] = "Enter a monthly limit above zero."; }); } if (step === 4) draft.savingsGoals.forEach((item) => { if (!item.name.trim()) next[`goal-${item.id}-name`] = "Add a goal name."; if (item.target <= 0) next[`goal-${item.id}-target`] = "Enter a target above zero."; if (item.saved < 0 || item.saved > item.target) next[`goal-${item.id}-saved`] = "Saved amount must be between zero and the target."; if (item.contribution < 0) next[`goal-${item.id}-contribution`] = "Contribution cannot be negative."; if (item.targetDate && Number.isNaN(Date.parse(item.targetDate))) next[`goal-${item.id}-date`] = "Use a valid target date."; }); setErrors(next); if (Object.keys(next).length) requestAnimationFrame(() => errorBox.current?.focus()); return !Object.keys(next).length; };
-  const continueStep = () => { if (!validate()) return; if (step < 5) go(step + 1); };
-  const complete = () => { if (submitting || !validate()) return; setSubmitting(true); const completed = { ...draft, onboarding: { currentStep: 5, completed: true } }; if (save(completed)) router.push("/dashboard"); else setSubmitting(false); };
-  const hasAmounts = draft.incomeSources.some((item) => item.amount > 0) || draft.accounts.some((item) => item.balance !== 0) || draft.creditCards.some((item) => item.limit > 0 || item.owed > 0) || activeBudgetCategories.some((item) => item.limit > 0) || draft.savingsGoals.some((item) => item.target > 0 || item.saved > 0 || item.contribution > 0);
-  return <main className="onboarding-page"><header className="onboarding-header"><Link className="app-wordmark onboarding-brand" href="/" aria-label="Return to AWN homepage"><span className="wordmark-mark" aria-hidden="true">a</span><span>awn</span></Link><Link className="onboarding-back" href="/">Return home</Link></header><section className="onboarding-card"><p className="app-eyebrow">Your starting plan</p><p className="step-status" aria-live="polite">Step {step} of 5: {stepNames[step - 1]}</p><h1 tabIndex={-1} ref={heading}>{stepNames[step - 1]}</h1><p className="onboarding-intro">{step === 1 ? "Let’s start with the income you expect in a typical month." : step === 2 ? "This is optional. Friendly names and summary amounts are enough—never enter card numbers or login details." : step === 3 ? "Choose only the parts of your month that matter to you." : step === 4 ? "This is optional too. A goal can wait until you are ready." : "Take a quiet look at the plan you have made."}</p>{Object.keys(errors).length > 0 && <div className="form-message is-error" role="alert" tabIndex={-1} ref={errorBox}>Please review the highlighted fields. {Object.values(errors)[0]}</div>}{notice && <p className="form-message is-success" role="status">{notice}</p>}
-  {step === 1 && <IncomeStep draft={draft} change={change} errors={errors} hasAmounts={hasAmounts} />}{step === 2 && <AccountsStep draft={draft} change={change} errors={errors} />}{step === 3 && <BudgetStep draft={draft} change={change} errors={errors} />}{step === 4 && <SavingsStep draft={draft} change={change} errors={errors} />}{step === 5 && <ReviewStep draft={draft} />}
-  <div className="onboarding-actions"><button type="button" className="app-button app-button-secondary" onClick={() => go(step - 1)} disabled={step === 1}>Back</button>{step === 2 || step === 4 ? <button type="button" className="text-button" onClick={() => go(step + 1)}>Skip for now</button> : null}{step < 5 ? <button type="button" className="app-button" onClick={continueStep}>Continue</button> : <button type="button" className="app-button" onClick={complete} disabled={submitting}>{submitting ? "Saving your plan…" : "Confirm and finish"}</button>}</div></section></main>;
+  if (!ready || !draft) return <main className="onboarding-page"><p className="loading-copy">Loading your setup…</p></main>;
+
+  const change = (patch: Partial<FinancialProfile>) => { setErrors({}); setDraft((current) => current ? { ...current, ...patch } : current); };
+  const closeEditors = () => { setItemEditor(undefined); setGoalEditor(undefined); setCategoryEditor(undefined); };
+  const go = (next: number) => { setErrors({}); setNotice(""); closeEditors(); setStep(Math.max(0, Math.min(6, next))); };
+  const validateStep = () => {
+    const next: Errors = {};
+    if (step === 1) {
+      if (!draft.country?.trim()) next.country = "Please choose a country.";
+      if (!Number.isInteger(draft.budgetStartDay) || (draft.budgetStartDay ?? 0) < 1 || (draft.budgetStartDay ?? 0) > 28) next.budgetStartDay = "Choose a budget start day from 1 to 28.";
+    }
+    if (step === 4 && !budgetAllocation(draft).total) next.monthlyBudget = "Enter a monthly budget above zero, or choose Skip for now.";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+  const continueStep = () => { if (validateStep()) go(step + 1); };
+  const complete = () => {
+    if (submitting) return;
+    setSubmitting(true);
+    const completed = { ...draft, onboarding: { currentStep: 6, completed: true } };
+    if (save(completed)) router.replace("/dashboard"); else setSubmitting(false);
+  };
+  const editorOpen = Boolean(itemEditor || goalEditor !== undefined || categoryEditor !== undefined);
+
+  return <main className="onboarding-page">
+    <header className="onboarding-header"><Link className="app-wordmark onboarding-brand" href="/" aria-label="Return to AWN homepage"><span className="wordmark-mark" aria-hidden="true">a</span><span>awn</span></Link><span className="onboarding-security">Manual setup · no banking login required</span></header>
+    <section className={`onboarding-card${step === 0 ? " is-welcome" : ""}`}>
+      {step > 0 && <Progress step={step} />}
+      <p className="app-eyebrow">{step === 0 ? "Welcome to AWN" : step === 6 ? "Review & start" : `Step ${step} of 6`}</p>
+      <h1 tabIndex={-1} ref={heading}>{stepTitle(step)}</h1>
+      <p className="onboarding-intro">{stepIntro(step)}</p>
+      {notice && <p className="form-message is-warning" role="status">{notice}</p>}
+      {step === 0 && <Welcome />}
+      {step === 1 && <BasicsStep draft={draft} change={change} errors={errors} />}
+      {step === 2 && <AccountsStep draft={draft} change={change} editor={itemEditor} setEditor={setItemEditor} notice={setNotice} />}
+      {step === 3 && <HowAwnWorks />}
+      {step === 4 && <BudgetStep draft={draft} change={change} error={errors.monthlyBudget} editor={categoryEditor} setEditor={setCategoryEditor} />}
+      {step === 5 && <SavingsStep draft={draft} change={change} editor={goalEditor} setEditor={setGoalEditor} />}
+      {step === 6 && <ReviewStep draft={draft} edit={go} />}
+      {!editorOpen && <FlowActions step={step} draft={draft} submitting={submitting} back={() => go(step - 1)} continueStep={continueStep} skip={() => go(step + 1)} complete={complete} />}
+    </section>
+  </main>;
 }
 
-function Field({ label, error, children, hint }: { label: string; error?: string; hint?: string; children: React.ReactNode }) { const errorId = useId(); const control = isValidElement(children) ? cloneElement(children as ReactElement<{ "aria-invalid"?: boolean; "aria-describedby"?: string }>, { "aria-invalid": !!error, "aria-describedby": error ? errorId : undefined }) : children; return <label className="form-field">{label}{control}{hint && <small>{hint}</small>}{error && <small className="field-error" id={errorId}>{error}</small>}</label>; }
-function MoneyField({ label, value, onChange, error }: { label: string; value: number; onChange: (value: number) => void; error?: string }) { return <Field label={label} error={error}><MoneyInput value={value} onValueChange={onChange} placeholder="0.00" /></Field>; }
-function GuardedRemoveButton({ linked, kind, label, onRemove }: { linked: boolean; kind: "account" | "credit-card"; label: string; onRemove: () => void }) { const messageId = useId(); return <><button type="button" className="icon-button" aria-label={label} aria-describedby={linked ? messageId : undefined} disabled={linked} onClick={onRemove}>Remove</button>{linked && <p className="form-help removal-guard" id={messageId}>{removalGuardMessage(kind)}</p>}</>; }
-
-function IncomeStep({ draft, change, errors, hasAmounts }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; errors: Errors; hasAmounts: boolean }) { const add = () => change({ incomeSources: [...draft.incomeSources, incomeItem()] }); const set = (id: string, patch: Partial<IncomeSource>) => change({ incomeSources: updateAt(draft.incomeSources, id, patch) }); const currencyError = errors.currency; return <div className="step-content"><Field label="Your base currency" error={currencyError} hint={hasAmounts ? "To keep existing amounts accurate, reset your local plan before choosing another currency." : "This will be used throughout your plan."}><select value={draft.currency} onChange={(event) => { if (hasAmounts && event.target.value !== draft.currency) return; change({ currency: event.target.value as FinancialProfile["currency"] }); }} disabled={hasAmounts}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></Field><div className="editor-heading"><h2>Expected monthly income</h2><button type="button" className="text-button" onClick={add}>Add income source</button></div>{errors.income && <p className="field-error">{errors.income}</p>}<div className="repeat-list">{draft.incomeSources.map((source, index) => <article className="repeat-card" key={source.id}><div className="repeat-card-heading"><h3>Income source {index + 1}</h3><button type="button" className="icon-button" onClick={() => change({ incomeSources: removeAt(draft.incomeSources, source.id) })} aria-label={`Remove ${source.name || `income source ${index + 1}`}`}>Remove</button></div><Field label="Name" error={errors[`income-${source.id}-name`]}><input value={source.name} onChange={(event) => set(source.id, { name: event.target.value })} placeholder="e.g. Main work" /></Field><div className="field-row"><MoneyField label="Expected monthly amount" value={source.amount} onChange={(amount) => set(source.id, { amount })} error={errors[`income-${source.id}-amount`]} /><Field label="Expected day" error={errors[`income-${source.id}-day`]} hint="31 means the final day in shorter months."><input type="number" min="1" max="31" value={source.day} onChange={(event) => set(source.id, { day: Number(event.target.value) })} /></Field></div></article>)}</div>{!draft.incomeSources.length && <button type="button" className="add-card" onClick={add}>Add your expected monthly income</button>}</div>; }
-
-function AccountsStep({ draft, change, errors }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; errors: Errors }) {
-  const setAccount = (id: string, patch: Partial<Account>) => change({ accounts: updateAt(draft.accounts, id, patch) });
-  const setCard = (id: string, patch: Partial<CreditCard>) => change({ creditCards: updateAt(draft.creditCards, id, patch) });
-  return <div className="step-content"><div className="editor-heading"><h2>Accounts</h2><button type="button" className="text-button" onClick={() => change({ accounts: [...draft.accounts, accountItem()] })}>Add account</button></div><p className="form-help">Enter only a friendly name and a starting balance. AWN does not need account numbers, card numbers, CVVs, PINs, or login details.</p>{draft.accounts.map((account, index) => <article className="repeat-card" key={account.id}><div className="repeat-card-heading"><h3>Account {index + 1}</h3><GuardedRemoveButton linked={hasLinkedAccountActivity(draft, account.id)} kind="account" label={`Remove ${account.name || `account ${index + 1}`}`} onRemove={() => change({ accounts: removeAt(draft.accounts, account.id) })} /></div><Field label="Account name" error={errors[`account-${account.id}-name`]}><input value={account.name} onChange={(event) => setAccount(account.id, { name: event.target.value })} placeholder="e.g. Everyday account" /></Field><div className="field-row"><Field label="Type"><select value={account.type} onChange={(event) => setAccount(account.id, { type: event.target.value as Account["type"] })}><option value="current">Current</option><option value="savings">Savings</option><option value="cash">Cash</option></select></Field><MoneyField label="Starting balance" value={account.balance} onChange={(balance) => setAccount(account.id, { balance })} error={errors[`account-${account.id}-balance`]} /></div></article>)}<div className="editor-heading"><h2>Credit cards</h2><button type="button" className="text-button" onClick={() => change({ creditCards: [...draft.creditCards, cardItem()] })}>Add credit card</button></div>{draft.creditCards.map((card, index) => <article className="repeat-card" key={card.id}><div className="repeat-card-heading"><h3>Credit card {index + 1}</h3><GuardedRemoveButton linked={hasLinkedCardActivity(draft, card.id)} kind="credit-card" label={`Remove ${card.name || `credit card ${index + 1}`}`} onRemove={() => change({ creditCards: removeAt(draft.creditCards, card.id) })} /></div><Field label="Card name" error={errors[`card-${card.id}-name`]}><input value={card.name} onChange={(event) => setCard(card.id, { name: event.target.value })} placeholder="e.g. Travel card" /></Field><div className="field-row"><MoneyField label="Credit limit" value={card.limit} onChange={(limit) => setCard(card.id, { limit })} error={errors[`card-${card.id}-limit`]} /><MoneyField label="Current balance owed" value={card.owed} onChange={(owed) => setCard(card.id, { owed })} error={errors[`card-${card.id}-owed`]} /><Field label="Payment due day" error={errors[`card-${card.id}-day`]}><input type="number" min="1" max="31" value={card.dueDay} onChange={(event) => setCard(card.id, { dueDay: Number(event.target.value) })} /></Field></div></article>)}</div>;
+function createProfileDefaults() {
+  const now = new Date().toISOString();
+  return { version: 2, country: "United Arab Emirates", currency: "AED", budgetStartDay: 1, incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], savingsGoals: [], onboarding: { currentStep: 0, completed: false }, createdAt: now, updatedAt: now, transactions: [] } satisfies FinancialProfile;
 }
 
-function BudgetStep({ draft, change, errors }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; errors: Errors }) { const [choice, setChoice] = useState(suggestedCategories[0]); const [custom, setCustom] = useState(""); const month = financialReferenceMonth(draft); const categories = budgetCategoriesForMonth(draft, month); const update = (next: typeof categories) => change({ categoryBudgets: replaceBudgetSnapshot(draft, month, next).categoryBudgets }); const add = (name: string) => { const cleaned = name.trim(); if (!cleaned || categories.some((category) => category.name.trim().toLowerCase() === cleaned.toLowerCase())) return; update([...categories, { id: newLocalId(), name: cleaned, limit: 0, month }]); setCustom(""); }; return <div className="step-content"><div className="category-picker"><select value={choice} onChange={(event) => setChoice(event.target.value)}>{suggestedCategories.map((category) => <option key={category}>{category}</option>)}</select><button type="button" className="app-button" onClick={() => add(choice)}>Add category</button></div><div className="custom-category"><Field label="Or add your own category"><input value={custom} onChange={(event) => setCustom(event.target.value)} placeholder="e.g. Pets" /></Field><button type="button" className="text-button" onClick={() => add(custom)}>Add custom category</button></div>{errors.category && <p className="field-error">{errors.category}</p>}<div className="repeat-list">{categories.map((category, index) => <article className="repeat-card compact-card" key={category.id}><div className="repeat-card-heading"><h3>Category {index + 1}</h3><button type="button" className="icon-button" aria-label={`Remove ${category.name || `category ${index + 1}`}`} onClick={() => update(removeAt(categories, category.id))}>Remove</button></div><div className="field-row"><Field label="Category name" error={errors[`category-${category.id}-name`]}><input value={category.name} onChange={(event) => update(updateAt(categories, category.id, { name: event.target.value }))} /></Field><MoneyField label="Monthly limit" value={category.limit} onChange={(limit) => update(updateAt(categories, category.id, { limit }))} error={errors[`category-${category.id}-limit`]} /></div></article>)}</div></div>; }
+function stepTitle(step: number) {
+  return ["Let’s set up your money", "Your basics", "Accounts, cards & cash", "How AWN works", "Your monthly budget", "What are you saving for?", "You’re ready to start"][step];
+}
 
-function SavingsStep({ draft, change, errors }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; errors: Errors }) { const set = (id: string, patch: Partial<SavingsGoal>) => change({ savingsGoals: updateAt(draft.savingsGoals, id, patch) }); return <div className="step-content"><div className="editor-heading"><h2>Savings goals</h2><button type="button" className="text-button" onClick={() => change({ savingsGoals: [...draft.savingsGoals, { ...goalItem(), priority: draft.savingsGoals.length + 1 }] })}>Add savings goal</button></div>{draft.savingsGoals.map((goal, index) => <article className="repeat-card" key={goal.id}><div className="repeat-card-heading"><h3>Goal {index + 1}</h3><button type="button" className="icon-button" aria-label={`Remove ${goal.name || `goal ${index + 1}`}`} onClick={() => change({ savingsGoals: removeAt(draft.savingsGoals, goal.id) })}>Remove</button></div><Field label="Goal name" error={errors[`goal-${goal.id}-name`]}><input value={goal.name} onChange={(event) => set(goal.id, { name: event.target.value })} placeholder="e.g. Home fund" /></Field><div className="field-row three"><MoneyField label="Target amount" value={goal.target} onChange={(target) => set(goal.id, { target })} error={errors[`goal-${goal.id}-target`]} /><MoneyField label="Already saved" value={goal.saved} onChange={(saved) => set(goal.id, { saved })} error={errors[`goal-${goal.id}-saved`]} /><MoneyField label="Planned monthly contribution" value={goal.contribution} onChange={(contribution) => set(goal.id, { contribution })} error={errors[`goal-${goal.id}-contribution`]} /></div><div className="field-row"><Field label="Target date (optional)" error={errors[`goal-${goal.id}-date`]}><input type="date" value={goal.targetDate ?? ""} onChange={(event) => set(goal.id, { targetDate: event.target.value || undefined })} /></Field><Field label="Priority"><select value={goal.priority} onChange={(event) => set(goal.id, { priority: Number(event.target.value) })}><option value="1">First</option><option value="2">Next</option><option value="3">Later</option></select></Field></div></article>)}</div>; }
+function stepIntro(step: number) {
+  return ["A few simple details will help AWN build your financial overview.", "Set the context AWN will use for your plan.", "Add what you use today. Every item here is optional.", "Three simple ideas keep your financial picture accurate.", "Start with one overall spending amount, then allocate only the categories you want.", "Add a goal now, or come back to it later.", "Take a quick look before we build your dashboard."][step];
+}
 
-function ReviewStep({ draft }: { draft: FinancialProfile }) { const summary = calculateFinancialSummary(draft); const message = summary.remainingToAllocate < 0 ? "Your plan is a little higher than your expected income. You can still save it and adjust it anytime." : summary.remainingToAllocate === 0 ? "Your plan is fully allocated. You’re off to a good start." : "This amount has not been assigned to your budget or savings yet."; return <div className="step-content"><div className="review-summary"><span>Expected monthly income <strong>{formatMoney(summary.expectedIncome, draft.currency)}</strong></span><span>Monthly spending budget <strong>{formatMoney(summary.spendingBudget, draft.currency)}</strong></span><span>Planned monthly savings <strong>{formatMoney(summary.plannedSavings, draft.currency)}</strong></span><span>Available after planned savings <strong>{formatMoney(summary.plannedAvailable, draft.currency)}</strong></span><span>Remaining to allocate <strong>{formatMoney(summary.remainingToAllocate, draft.currency)}</strong></span></div><p className={`form-message ${summary.remainingToAllocate < 0 ? "is-warning" : "is-success"}`} role="status">{message}</p><p className="privacy-note">Your information stays in this browser for now. It is not sent to an AWN server or synced across devices.</p></div>; }
+function Progress({ step }: { step: number }) {
+  return <div className="onboarding-progress"><div className="progress-labels" aria-label={`Step ${step} of 6`}>{onboardingSteps.map((name, index) => <span className={index + 1 === step ? "is-active" : index + 1 < step ? "is-complete" : ""} key={name}>{name}</span>)}</div><div className="progress-track"><span style={{ width: `${step / 6 * 100}%` }} /></div><p>Step {step} of 6</p></div>;
+}
+
+function Welcome() {
+  return <div className="welcome-content"><aside className="onboarding-info"><strong>Automatic bank linking is coming soon.</strong><p>For now, you can add your accounts and cards manually.</p></aside><div className="privacy-list"><strong>AWN never needs your:</strong><span>Full card number</span><span>PIN or CVV</span><span>Bank password</span><span>Banking login</span></div></div>;
+}
+
+function BasicsStep({ draft, change, errors }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; errors: Errors }) {
+  const countries = draft.country && !(draft.country in countryCurrencies) ? [draft.country, ...Object.keys(countryCurrencies)] : Object.keys(countryCurrencies);
+  const hasAmounts = draft.accounts.some((item) => item.balance !== 0) || draft.creditCards.some((item) => item.limit || item.owed) || draft.categoryBudgets.some((item) => item.limit) || draft.savingsGoals.some((item) => item.target || item.saved);
+  const updateCountry = (country: string) => change({ country, ...(!hasAmounts && suggestedCurrency(country) ? { currency: suggestedCurrency(country) as Currency } : {}) });
+  return <div className="step-content basics-grid"><FormField label="Country" error={errors.country}><select value={draft.country} onChange={(event) => updateCountry(event.target.value)}>{countries.map((country) => <option key={country}>{country}</option>)}</select></FormField><FormField label="Currency" hint={hasAmounts ? "Existing amounts keep their current base currency." : "Suggested from your country; you can change it."}><select value={draft.currency} disabled={hasAmounts} onChange={(event) => change({ currency: event.target.value as Currency })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></FormField><FormField label="When would you like your monthly budget to start?" error={errors.budgetStartDay} hint="Choose a day from 1 to 28 so every month has a valid start date." className="field-wide"><input type="number" min="1" max="28" value={draft.budgetStartDay ?? 1} onChange={(event) => change({ budgetStartDay: Number(event.target.value) })} /></FormField><aside className="onboarding-info field-wide"><strong>Budget around your real month.</strong><p>Some people budget from the 1st. Others start on payday. With day {draft.budgetStartDay ?? 1}, your current cycle is {formatBudgetCycle(draft.budgetStartDay ?? 1)}.</p></aside></div>;
+}
+
+function AccountsStep({ draft, change, editor, setEditor, notice }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; editor?: ItemEditor; setEditor: (editor?: ItemEditor) => void; notice: (message: string) => void }) {
+  const debitCards = draft.debitCards ?? [];
+  const persist = (item: FinancialItem) => {
+    if (editor?.kind === "account") change({ accounts: upsertOnboardingItem(draft.accounts, item as Account) });
+    if (editor?.kind === "debit") change({ debitCards: upsertOnboardingItem(debitCards, item as DebitCard) });
+    if (editor?.kind === "credit") change({ creditCards: upsertOnboardingItem(draft.creditCards, item as CreditCard) });
+    setEditor(undefined);
+  };
+  const removeAccount = (account: Account) => {
+    if (hasLinkedAccountActivity(draft, account.id)) return notice(removalGuardMessage("account"));
+    if (debitCards.some((card) => card.linkedAccountId === account.id)) return notice("Remove or unlink this account’s debit card first.");
+    change({ accounts: removeOnboardingItem(draft.accounts, account.id) });
+  };
+  const removeCredit = (card: CreditCard) => hasLinkedCardActivity(draft, card.id) ? notice(removalGuardMessage("credit-card")) : change({ creditCards: removeOnboardingItem(draft.creditCards, card.id) });
+  if (editor) return <div className="step-content"><div className="inline-editor-heading"><p className="app-eyebrow">{editor.item ? "Edit" : "Add"} {editor.kind === "account" ? "account" : `${editor.kind} card`}</p><h2>{editor.item ? editor.item.name : "Add manual details"}</h2></div><FinancialItemForm kind={editor.kind} existing={editor.item} profile={draft} onCancel={() => setEditor(undefined)} onSave={persist} /></div>;
+  return <div className="step-content"><div className="onboarding-add-grid"><button type="button" onClick={() => setEditor({ kind: "account" })}>+ Add account</button><button type="button" onClick={() => setEditor({ kind: "debit" })}>+ Add debit card</button><button type="button" onClick={() => setEditor({ kind: "credit" })}>+ Add credit card</button></div><aside className="onboarding-info"><strong>Automatic bank linking is coming soon.</strong><p>For now, add your accounts and cards manually. AWN only needs the details required to build your financial overview.</p></aside><SummaryGroup title="Accounts" empty="No accounts added yet.">{draft.accounts.map((account) => <SummaryRow key={account.id} title={account.name} detail={`${account.type} · ${formatMoney(account.balance, account.currency ?? draft.currency)}${account.lastFour ? ` · •••• ${account.lastFour}` : ""}`} edit={() => setEditor({ kind: "account", item: account })} remove={() => removeAccount(account)} />)}</SummaryGroup><SummaryGroup title="Debit cards" empty="No debit cards added yet.">{debitCards.map((card) => <SummaryRow key={card.id} title={card.name} detail={`${card.purpose || "Debit card"}${card.lastFour ? ` · •••• ${card.lastFour}` : ""}${card.linkedAccountId ? ` · Linked to ${draft.accounts.find((account) => account.id === card.linkedAccountId)?.name ?? "account"}` : " · Not linked"}`} edit={() => setEditor({ kind: "debit", item: card })} remove={() => change({ debitCards: removeOnboardingItem(debitCards, card.id) })} />)}</SummaryGroup><SummaryGroup title="Credit cards" empty="No credit cards added yet.">{draft.creditCards.map((card) => <SummaryRow key={card.id} title={card.name} detail={`${formatMoney(card.owed, card.currency ?? draft.currency)} owed${card.lastFour ? ` · •••• ${card.lastFour}` : ""}`} edit={() => setEditor({ kind: "credit", item: card })} remove={() => removeCredit(card)} />)}</SummaryGroup><div className="cash-concept"><span>Cash</span><p>You’ll also be able to track cash alongside your accounts and cards. Full cash-ledger behavior arrives in Phase 2.</p></div></div>;
+}
+
+function HowAwnWorks() {
+  const concepts = [{ title: "Income", description: "Money coming into your finances.", examples: "Salary · Refund · Part-time income", note: "Income increases the balance where the money arrives." }, { title: "Expense", description: "Money you spend.", examples: "Rent · Groceries · Fuel", note: "Purchases count toward spending and budgets." }, { title: "Transfer", description: "Money moved between your own balances.", examples: "Account → Account · Account → Savings · Account → Credit Card", note: "Paying your credit card is a transfer, not another expense. The purchase was already counted when it happened." }];
+  return <div className="step-content concept-grid">{concepts.map((concept, index) => <article key={concept.title}><span>0{index + 1}</span><h2>{concept.title}</h2><p>{concept.description}</p><small>{concept.examples}</small><strong>{concept.note}</strong></article>)}</div>;
+}
+
+function BudgetStep({ draft, change, error, editor, setEditor }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; error?: string; editor: CategoryBudget | null | undefined; setEditor: (editor: CategoryBudget | null | undefined) => void }) {
+  const month = financialReferenceMonth(draft);
+  const allocation = budgetAllocation(draft, month);
+  const updateCategories = (categories: CategoryBudget[]) => change({ categoryBudgets: replaceBudgetSnapshot(draft, month, categories).categoryBudgets });
+  const persist = (category: CategoryBudget) => { updateCategories(upsertOnboardingItem(allocation.categories, category)); setEditor(undefined); };
+  return <div className="step-content"><FormField label="What would you like to spend this month?" error={error} hint="This is your overall monthly spending budget."><MoneyInput value={allocation.total} onValueChange={(value) => change({ monthlyBudget: value > 0 ? value : undefined })} placeholder="0.00" /></FormField>{allocation.total > 0 && <><div className="allocation-summary"><span>Total monthly budget<strong>{formatMoney(allocation.total, draft.currency)}</strong></span><span>Allocated<strong>{formatMoney(allocation.allocated, draft.currency)}</strong></span><span>Unallocated<strong className={allocation.unallocated < 0 ? "negative" : ""}>{formatMoney(allocation.unallocated, draft.currency)}</strong></span></div>{allocation.unallocated < 0 && <p className="form-message is-warning" role="status">Category allocations exceed your overall budget by {formatMoney(Math.abs(allocation.unallocated), draft.currency)}.</p>}{editor !== undefined ? <CategoryBudgetForm existing={editor ?? undefined} categories={allocation.categories} onCancel={() => setEditor(undefined)} onSave={persist} /> : <><div className="editor-heading"><h2>Category budgets <small>Optional</small></h2><button type="button" className="text-button" onClick={() => setEditor(null)}>+ Add category</button></div><SummaryGroup empty="No category budgets added. Your overall budget is still saved.">{allocation.categories.map((category) => <SummaryRow key={category.id} title={category.name} detail={formatMoney(category.limit, draft.currency)} edit={() => setEditor(category)} remove={() => updateCategories(removeOnboardingItem(allocation.categories, category.id))} />)}</SummaryGroup></>}</>}</div>;
+}
+
+function CategoryBudgetForm({ existing, categories, onCancel, onSave }: { existing?: CategoryBudget; categories: CategoryBudget[]; onCancel: () => void; onSave: (category: CategoryBudget) => void }) {
+  const [name, setName] = useState(existing?.name ?? suggestedCategories.find((suggestion) => !categories.some((category) => category.name === suggestion)) ?? "Other");
+  const [limit, setLimit] = useState(existing?.limit ?? 0);
+  const [errors, setErrors] = useState<Errors>({});
+  const submit = () => {
+    const next: Errors = {};
+    if (!name.trim()) next.name = "Please choose a category.";
+    if (categories.some((category) => category.id !== existing?.id && category.name.toLowerCase() === name.trim().toLowerCase())) next.name = "That category already has a budget.";
+    if (limit <= 0) next.limit = "Monthly limit must be above zero.";
+    setErrors(next);
+    if (!Object.keys(next).length) onSave({ id: existing?.id ?? newLocalId(), name: name.trim(), limit, month: existing?.month });
+  };
+  return <div className="inline-form"><div className="field-row"><FormField label="Category" error={errors.name}><select value={name} onChange={(event) => setName(event.target.value)}>{suggestedCategories.map((category) => <option key={category}>{category}</option>)}</select></FormField><FormField label="Monthly limit" error={errors.limit}><MoneyInput value={limit} onValueChange={setLimit} placeholder="0.00" /></FormField></div><div className="confirm-dialog-actions"><button type="button" className="app-button app-button-secondary" onClick={onCancel}>Cancel</button><button type="button" className="app-button" onClick={submit}>{existing ? "Save changes" : "Add category"}</button></div></div>;
+}
+
+function SavingsStep({ draft, change, editor, setEditor }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; editor: SavingsGoal | null | undefined; setEditor: (editor: SavingsGoal | null | undefined) => void }) {
+  const persist = (goal: SavingsGoal) => { change({ savingsGoals: upsertOnboardingItem(draft.savingsGoals, goal) }); setEditor(undefined); };
+  if (editor !== undefined) return <div className="step-content"><SavingsGoalForm profile={draft} existing={editor ?? undefined} onCancel={() => setEditor(undefined)} onSave={persist} /></div>;
+  return <div className="step-content"><div className="editor-heading"><h2>Savings goals <small>Optional</small></h2><button type="button" className="text-button" onClick={() => setEditor(null)}>+ Add savings goal</button></div><SummaryGroup empty="No savings goals yet. You can add one whenever it feels useful.">{[...draft.savingsGoals].sort((a, b) => a.priority - b.priority).map((goal) => <SummaryRow key={goal.id} title={goal.name} detail={`${formatMoney(goal.saved, draft.currency)} of ${formatMoney(goal.target, draft.currency)} · ${formatMoney(goal.contribution, draft.currency)}/month · ${formatTargetMonth(goal.targetDate)} · Priority ${goal.priority}`} edit={() => setEditor(goal)} remove={() => change({ savingsGoals: removeOnboardingItem(draft.savingsGoals, goal.id) })} />)}</SummaryGroup></div>;
+}
+
+function ReviewStep({ draft, edit }: { draft: FinancialProfile; edit: (step: number) => void }) {
+  const allocation = budgetAllocation(draft);
+  const accountBalance = draft.accounts.reduce((total, account) => total + account.balance, 0);
+  const totalSaved = draft.savingsGoals.reduce((total, goal) => total + goal.saved, 0);
+  const totalTarget = draft.savingsGoals.reduce((total, goal) => total + goal.target, 0);
+  const contributions = draft.savingsGoals.reduce((total, goal) => total + goal.contribution, 0);
+  return <div className="step-content review-grid"><ReviewCard title="Money setup" action="Edit" edit={() => edit(2)}><span>Accounts<strong>{draft.accounts.length}</strong></span><span>Debit cards<strong>{draft.debitCards?.length ?? 0}</strong></span><span>Credit cards<strong>{draft.creditCards.length}</strong></span><span>Starting account balances<strong>{formatMoney(accountBalance, draft.currency)}</strong></span></ReviewCard><ReviewCard title="Budget cycle" action="Edit" edit={() => edit(1)}><span>Start day<strong>Day {draft.budgetStartDay ?? 1}</strong></span><span>Current cycle<strong>{formatBudgetCycle(draft.budgetStartDay ?? 1)}</strong></span></ReviewCard><ReviewCard title="Monthly plan" action={allocation.total ? "Edit" : "Add"} edit={() => edit(4)}>{allocation.total ? <><span>Overall budget<strong>{formatMoney(allocation.total, draft.currency)}</strong></span><span>Allocated<strong>{formatMoney(allocation.allocated, draft.currency)}</strong></span><span>Unallocated<strong>{formatMoney(allocation.unallocated, draft.currency)}</strong></span><span>Category budgets<strong>{allocation.categories.length}</strong></span></> : <p>No monthly budget yet.</p>}</ReviewCard><ReviewCard title="Savings goals" action={draft.savingsGoals.length ? "Edit" : "Add"} edit={() => edit(5)}>{draft.savingsGoals.length ? <><span>Goals<strong>{draft.savingsGoals.length}</strong></span><span>Currently saved<strong>{formatMoney(totalSaved, draft.currency)}</strong></span><span>Combined target<strong>{formatMoney(totalTarget, draft.currency)}</strong></span><span>Monthly contributions<strong>{formatMoney(contributions, draft.currency)}</strong></span></> : <p>No savings goals yet.</p>}</ReviewCard></div>;
+}
+
+function ReviewCard({ title, action, edit, children }: { title: string; action: string; edit: () => void; children: React.ReactNode }) {
+  return <article className="review-card"><div><h2>{title}</h2><button type="button" className="text-button" onClick={edit}>{action}</button></div><div className="review-values">{children}</div></article>;
+}
+
+function SummaryGroup({ title, empty, children }: { title?: string; empty: string; children: React.ReactNode }) {
+  const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
+  return <section className="summary-group">{title && <h2>{title}</h2>}{hasChildren ? <div className="summary-rows">{children}</div> : <p className="empty-summary">{empty}</p>}</section>;
+}
+
+function SummaryRow({ title, detail, edit, remove }: { title: string; detail: string; edit: () => void; remove: () => void }) {
+  return <article className="summary-row"><div><strong>{title}</strong><small>{detail}</small></div><div><button type="button" className="text-button" onClick={edit}>Edit</button><button type="button" className="text-button is-danger" onClick={remove}>Remove</button></div></article>;
+}
+
+function FlowActions({ step, draft, submitting, back, continueStep, skip, complete }: { step: number; draft: FinancialProfile; submitting: boolean; back: () => void; continueStep: () => void; skip: () => void; complete: () => void }) {
+  const optionalEmpty = step === 2 && !draft.accounts.length && !(draft.debitCards?.length) && !draft.creditCards.length || step === 4 && !budgetAllocation(draft).total || step === 5 && !draft.savingsGoals.length;
+  return <div className="onboarding-actions">{step > 0 && <button type="button" className="app-button app-button-secondary" onClick={back}>Back</button>}{optionalEmpty && <button type="button" className="text-button" onClick={skip}>Skip for now</button>}{step === 0 ? <button type="button" className="app-button" onClick={continueStep}>Get started</button> : step < 6 ? <button type="button" className="app-button" onClick={continueStep}>Continue</button> : <button type="button" className="app-button" disabled={submitting} onClick={complete}>{submitting ? "Building your dashboard…" : "Finish setup"}</button>}</div>;
+}

@@ -7,6 +7,10 @@ import { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, financialStorageKe
 export { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, financialStorageKey, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage };
 type LoadResult = { profile: FinancialProfile | null; issue: string | null };
 
+function normalizeSettings(profile: FinancialProfile): FinancialProfile {
+  return { ...profile, country: profile.country ?? "United Arab Emirates", budgetStartDay: profile.budgetStartDay ?? 1, debitCards: profile.debitCards ?? [] };
+}
+
 export function loadFinancialProfile(ownerId: string): LoadResult {
   if (typeof window === "undefined") return { profile: null, issue: null };
   try {
@@ -16,7 +20,7 @@ export function loadFinancialProfile(ownerId: string): LoadResult {
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
       if (!isFinancialProfile(parsed)) return { profile: null, issue: "Your saved plan cannot be read. You can reset it and start again." };
-      const profile = normalizeFinancialPurposes(parsed as FinancialProfile);
+      const profile = normalizeSettings(normalizeFinancialPurposes(parsed as FinancialProfile));
       const normalized = normalizeBudgetSnapshots(profile, financialReferenceMonth(profile));
       window.localStorage.setItem(key, JSON.stringify(normalized));
       if (unscoped) window.localStorage.removeItem(FINANCIAL_STORAGE_KEY);
@@ -30,7 +34,7 @@ export function loadFinancialProfile(ownerId: string): LoadResult {
     const verified: unknown = JSON.parse(window.localStorage.getItem(key) ?? "null");
     if (!isFinancialProfile(verified)) return { profile: null, issue: "AWN could not safely update your saved plan." };
     window.localStorage.removeItem(LEGACY_FINANCIAL_STORAGE_KEY);
-    const profile = normalizeFinancialPurposes(verified as FinancialProfile);
+    const profile = normalizeSettings(normalizeFinancialPurposes(verified as FinancialProfile));
     const normalized = normalizeBudgetSnapshots(profile, financialReferenceMonth(profile));
     window.localStorage.setItem(key, JSON.stringify(normalized));
     return { profile: normalized, issue: null };

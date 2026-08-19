@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { AppIcon } from "@/components/app-icons";
 import { PageHeader } from "@/components/application-ui";
+import { FinancialItemForm, type FinancialItem } from "@/components/financial-item-form";
 import { useFinancialProfile } from "@/components/financial-provider";
-import { MoneyInput } from "@/components/money-input";
 import { useModalDialog } from "@/components/use-modal-dialog";
 import { calculateActualSummary, formatMoney } from "@/lib/financial-calculations";
 import { financialReferenceDate, financialReferenceMonth } from "@/lib/financial-date";
-import { FINANCIAL_PURPOSE_MAX_LENGTH, normalizeFinancialPurpose } from "@/lib/financial-purpose";
+import { displayCountry } from "@/lib/financial-institutions";
 import { hasLinkedAccountActivity, hasLinkedCardActivity, removalGuardMessage } from "@/lib/financial-reference-guards";
-import { currencies, newLocalId, type Account, type CreditCard, type Currency, type DebitCard, type FinancialProfile } from "@/lib/financial-types";
+import { type Account, type CreditCard, type Currency, type DebitCard, type FinancialProfile } from "@/lib/financial-types";
 
 type Editor = { kind: "account"; value?: Account } | { kind: "debit"; value?: DebitCard } | { kind: "credit"; value?: CreditCard };
 type Detail = { kind: "debit"; value: DebitCard } | { kind: "credit"; value: CreditCard };
@@ -19,33 +19,8 @@ type ViewAll = "account" | "debit" | "credit";
 
 const inlineItemLimit = 6;
 
-const countryCurrencies = {
-  "United Arab Emirates": "AED",
-  Serbia: "RSD",
-  "Saudi Arabia": "SAR",
-  "United States": "USD",
-  "United Kingdom": "GBP",
-  "Euro Area": "EUR",
-} as const satisfies Record<string, Currency>;
-
-const countryAliases: Record<string, string> = {
-  ae: "United Arab Emirates",
-  uae: "United Arab Emirates",
-  "united arab emirates": "United Arab Emirates",
-  rs: "Serbia",
-  serbia: "Serbia",
-  sa: "Saudi Arabia",
-  ksa: "Saudi Arabia",
-  "saudi arabia": "Saudi Arabia",
-  us: "United States",
-  usa: "United States",
-  "united states": "United States",
-  uk: "United Kingdom",
-  "united kingdom": "United Kingdom",
-};
-
-const masked = (lastFour?: string) => `•••• •••• •••• ${lastFour || "••••"}`;
-const accountDigits = (lastFour?: string) => lastFour ? `Account •••• ${lastFour}` : "Account digits not set";
+const masked = (lastFour?: string) => lastFour ? `•••• •••• •••• ${lastFour}` : undefined;
+const accountDigits = (lastFour?: string) => lastFour ? `Account •••• ${lastFour}` : undefined;
 const cardCurrency = (currency: Currency | undefined, profile: FinancialProfile) => currency ?? profile.currency;
 
 export function nextPaymentDueDate(dueDay: number, from = new Date()) {
@@ -63,12 +38,6 @@ export function nextPaymentDueDate(dueDay: number, from = new Date()) {
   }
 
   return dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric" });
-}
-
-function displayCountry(value?: string) {
-  const clean = value?.trim();
-  if (!clean) return "Country not set";
-  return countryAliases[clean.toLowerCase()] ?? clean.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function displayBankName(value?: string) {
@@ -174,13 +143,13 @@ function AccountCard({ account, balance, profile, edit, remove }: { account: Acc
   const currency = cardCurrency(account.currency, profile);
   const type = account.type === "current" ? "Current" : account.type;
   const eyebrow = account.purpose ? `${type} / ${account.purpose}` : account.type === "current" ? "Current / checking" : account.type;
-  return <article className="account-info-card static-card"><div className="account-card-heading"><p className="app-eyebrow" title={eyebrow}>{eyebrow}</p><CardActions edit={edit} remove={remove} label={account.name} /></div><div className="account-card-content"><div className="account-identity"><span className="account-bank-icon"><AppIcon name="bank" /></span><h3>{displayBankName(account.name)}</h3></div><p className="account-meta">{displayCountry(account.country)} · {currency}</p><p className="account-digits">{accountDigits(account.lastFour)}</p></div><div className="account-balance"><span>Current balance</span><strong>{formatMoney(balance, currency)}</strong></div></article>;
+  return <article className="account-info-card static-card"><div className="account-card-heading"><p className="app-eyebrow" title={eyebrow}>{eyebrow}</p><CardActions edit={edit} remove={remove} label={account.name} /></div><div className="account-card-content"><div className="account-identity"><span className="account-bank-icon"><AppIcon name="bank" /></span><h3>{displayBankName(account.name)}</h3></div><p className="account-meta">{displayCountry(account.country)} · {currency}</p>{accountDigits(account.lastFour) && <p className="account-digits">{accountDigits(account.lastFour)}</p>}</div><div className="account-balance"><span>Current balance</span><strong>{formatMoney(balance, currency)}</strong></div></article>;
 }
 
 function PaymentCard({ kind, name, purpose, country, currency, lastFour, linkedFunds, available, owed, open, edit, remove }: { kind: "debit" | "credit"; name: string; purpose?: string; country?: string; currency: Currency; lastFour?: string; linkedFunds?: string; available?: string; owed?: string; open: () => void; edit: () => void; remove: () => void }) {
   const keyboard = (event: React.KeyboardEvent<HTMLElement>) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } };
   const eyebrow = purpose ? `${kind} / ${purpose}` : kind;
-  return <article className={`payment-card action-card is-${kind}`} role="button" tabIndex={0} aria-label={`Open ${displayBankName(name)} ${kind} card details`} onClick={open} onKeyDown={keyboard}><div className="payment-card-top"><span title={eyebrow}>{eyebrow}</span><CardActions edit={edit} remove={remove} label={name} stopPropagation /></div><div className="payment-card-brand"><AppIcon name="card" /><strong>{displayBankName(name)}</strong></div><p className="payment-card-number">{masked(lastFour)}</p><div className="payment-card-footer"><span className="card-location">{displayCountry(country)} · {currency}</span><div className="card-money-stack">{kind === "debit" ? linkedFunds ? <CardMoney label="Linked account funds" value={linkedFunds} /> : <span className="card-unlinked">Not linked</span> : <><CardMoney label="Owed" value={owed || formatMoney(0, currency)} /><CardMoney label="Available credit" value={available || formatMoney(0, currency)} /></>}</div></div></article>;
+  return <article className={`payment-card action-card is-${kind}`} role="button" tabIndex={0} aria-label={`Open ${displayBankName(name)} ${kind} card details`} onClick={open} onKeyDown={keyboard}><div className="payment-card-top"><span title={eyebrow}>{eyebrow}</span><CardActions edit={edit} remove={remove} label={name} stopPropagation /></div><div className="payment-card-brand"><AppIcon name="card" /><strong>{displayBankName(name)}</strong></div>{masked(lastFour) && <p className="payment-card-number">{masked(lastFour)}</p>}<div className="payment-card-footer"><span className="card-location">{displayCountry(country)} · {currency}</span><div className="card-money-stack">{kind === "debit" ? linkedFunds ? <CardMoney label="Linked account funds" value={linkedFunds} /> : <span className="card-unlinked">Not linked</span> : <><CardMoney label="Owed" value={owed || formatMoney(0, currency)} /><CardMoney label="Available credit" value={available || formatMoney(0, currency)} /></>}</div></div></article>;
 }
 
 function CardMoney({ label, value }: { label: string; value: string }) { return <span className="card-money"><small>{label}</small><strong>{value}</strong></span>; }
@@ -220,50 +189,18 @@ export function AssetCreationWorkflow({ close }: { close: () => void }) {
 
 function EditorDialog({ editor, profile, save, close }: { editor: Editor; profile: FinancialProfile; save: (profile: FinancialProfile) => boolean; close: () => void }) {
   const existing = editor.value;
-  const existingAccount = editor.kind === "account" ? editor.value : undefined;
-  const existingDebit = editor.kind === "debit" ? editor.value : undefined;
-  const existingCredit = editor.kind === "credit" ? editor.value : undefined;
-  const initialCountry = existing && "country" in existing ? displayCountry(existing.country) : "United Arab Emirates";
-  const [name, setName] = useState(existing?.name ?? "");
-  const [purpose, setPurpose] = useState(existing?.purpose ?? "");
-  const [country, setCountry] = useState(initialCountry);
-  const [currency, setCurrency] = useState<Currency>(existing && "currency" in existing ? existing.currency ?? profile.currency : countryCurrencies["United Arab Emirates"]);
-  const [lastFour, setLastFour] = useState(existing && "lastFour" in existing ? existing.lastFour ?? "" : "");
-  const [accountType, setAccountType] = useState<Account["type"]>(existingAccount?.type ?? "current");
-  const [balance, setBalance] = useState(existingAccount?.balance ?? 0);
-  const [linkedAccountId, setLinkedAccountId] = useState(existingDebit?.linkedAccountId ?? "");
-  const [limit, setLimit] = useState(existingCredit?.limit ?? 0);
-  const [owed, setOwed] = useState(existingCredit?.owed ?? 0);
-  const [dueDay, setDueDay] = useState(existingCredit?.dueDay ?? 1);
-  const [error, setError] = useState("");
   const label = editor.kind === "account" ? "account" : `${editor.kind} card`;
-  const countryOptions = initialCountry !== "Country not set" && !(initialCountry in countryCurrencies) ? [initialCountry, ...Object.keys(countryCurrencies)] : Object.keys(countryCurrencies);
-  const updateCountry = (value: string) => { setCountry(value); const suggested = countryCurrencies[value as keyof typeof countryCurrencies]; if (suggested) setCurrency(suggested); };
-
-  const submit = () => {
-    if (!name.trim()) return setError("Add a bank name.");
-    if (!country.trim()) return setError("Choose a country.");
-    if (!/^\d{4}$/.test(lastFour)) return setError("Enter exactly four digits.");
-    if (editor.kind === "credit" && owed > limit) return setError("The amount owed cannot be higher than the credit limit.");
-    if (editor.kind === "credit" && (dueDay < 1 || dueDay > 31 || !Number.isInteger(dueDay))) return setError("Use a recurring payment due date from day 1 to 31.");
+  const persist = (item: FinancialItem) => {
     let next = profile;
-    if (editor.kind === "account") {
-      const item: Account = { id: existing?.id ?? newLocalId(), name: name.trim(), type: accountType, balance, country, currency, lastFour, purpose: normalizeFinancialPurpose(purpose) };
-      next = { ...profile, accounts: upsert(profile.accounts, item) };
-    } else if (editor.kind === "debit") {
-      const item: DebitCard = { id: existing?.id ?? newLocalId(), name: name.trim(), country, currency, lastFour, linkedAccountId: linkedAccountId || undefined, purpose: normalizeFinancialPurpose(purpose) };
-      next = { ...profile, debitCards: upsert(profile.debitCards ?? [], item) };
-    } else {
-      const item: CreditCard = { id: existing?.id ?? newLocalId(), name: name.trim(), country, currency, lastFour, limit, owed, dueDay, purpose: normalizeFinancialPurpose(purpose) };
-      next = { ...profile, creditCards: upsert(profile.creditCards, item) };
-    }
-    if (save(next)) close(); else setError("AWN could not save these changes.");
+    if (editor.kind === "account") next = { ...profile, accounts: upsert(profile.accounts, item as Account) };
+    else if (editor.kind === "debit") next = { ...profile, debitCards: upsert(profile.debitCards ?? [], item as DebitCard) };
+    else next = { ...profile, creditCards: upsert(profile.creditCards, item as CreditCard) };
+    const saved = save(next);
+    if (saved) close();
+    return saved;
   };
-
-  return <DialogFrame title={`${existing ? "Edit" : "Add"} ${label}`} eyebrow="Manual details" close={close} className="cards-editor-dialog"><div className="cards-form"><label className="form-field cards-field-wide">Bank name<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. FAB Bank" /></label><label className="form-field cards-field-wide">Purpose <small>Optional</small><input maxLength={FINANCIAL_PURPOSE_MAX_LENGTH} value={purpose} onChange={(event) => setPurpose(event.target.value)} placeholder="e.g. Salary, everyday expenses, savings" /></label><div className="cards-form-row"><label className="form-field">Country<select value={country} onChange={(event) => updateCountry(event.target.value)}>{countryOptions.map((item) => <option key={item}>{item}</option>)}</select></label><label className="form-field">Currency<select value={currency} onChange={(event) => setCurrency(event.target.value as Currency)}>{currencies.map((item) => <option key={item}>{item}</option>)}</select></label></div><label className="form-field cards-field-wide">Last 4 digits<input required inputMode="numeric" maxLength={4} value={lastFour} onChange={(event) => setLastFour(event.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="1234" /></label>{editor.kind === "account" && <div className="cards-form-row"><label className="form-field">Account type<select value={accountType} onChange={(event) => setAccountType(event.target.value as Account["type"])}><option value="current">Current / checking</option><option value="savings">Savings</option><option value="cash">Cash</option></select></label><MoneyField label="Current balance" value={balance} change={setBalance} /></div>}{editor.kind === "debit" && <label className="form-field cards-field-wide">Connected bank account <small>Optional</small><select value={linkedAccountId} onChange={(event) => setLinkedAccountId(event.target.value)}><option value="">Not linked</option>{profile.accounts.map((account) => <option value={account.id} key={account.id}>{displayBankName(account.name)}</option>)}</select></label>}{editor.kind === "credit" && <><div className="cards-form-row"><MoneyField label="Credit limit" value={limit} change={setLimit} /><MoneyField label="Current amount owed" value={owed} change={setOwed} /></div><label className="form-field cards-field-wide">Payment due date<small id="payment-due-date-help">Repeats monthly on this day.</small><input type="number" min="1" max="31" value={dueDay} aria-describedby="payment-due-date-help" onChange={(event) => setDueDay(Number(event.target.value))} /></label></>}{error && <p className="form-message is-error" role="alert">{error}</p>}<p className="cards-privacy-note"><AppIcon name="wallet" />AWN only stores these manual details. Never enter a full card number, PIN, CVV, banking password, or login.</p><div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>{existing ? "Save changes" : `Add ${label}`}</button></div></div></DialogFrame>;
+  return <DialogFrame title={`${existing ? "Edit" : "Add"} ${label}`} eyebrow="Manual details" close={close} className="cards-editor-dialog"><FinancialItemForm kind={editor.kind} existing={existing} profile={profile} onCancel={close} onSave={persist} /><p className="cards-privacy-note"><AppIcon name="wallet" />AWN only stores these manual details. Never enter a full card number, PIN, CVV, banking password, or login.</p></DialogFrame>;
 }
-
-function MoneyField({ label, value, change }: { label: string; value: number; change: (value: number) => void }) { return <label className="form-field">{label}<MoneyInput value={value} onValueChange={change} placeholder="0.00" /></label>; }
 
 function CardDetailDialog({ detail, profile, accounts, cards, availableCredit, close, edit }: { detail: Detail; profile: FinancialProfile; accounts: Record<string, number>; cards: Record<string, number>; availableCredit: Record<string, number>; close: () => void; edit: () => void }) {
   if (detail.kind === "debit") {
@@ -280,7 +217,7 @@ function CardDetailDialog({ detail, profile, accounts, cards, availableCredit, c
   return <DialogFrame title="" eyebrow="Credit card" close={close} className="card-detail-dialog"><DetailCard kind="credit" purpose={card.purpose} name={card.name} lastFour={card.lastFour} availableLabel="Available credit" availableValue={formatMoney(available, currency)} /><div className="card-detail-metrics is-credit"><DetailMetric label="Current amount owed" value={formatMoney(owed, currency)} /><DetailMetric label="Credit limit" value={formatMoney(card.limit, currency)} /><DetailMetric label="Payment due date" value={nextPaymentDueDate(card.dueDay, new Date(`${financialReferenceDate(profile)}T12:00:00`))} /></div><div className="credit-usage"><div><span>Credit limit used</span><strong>{Math.round(percent)}%</strong></div><div className="progress-track" role="progressbar" aria-label="Credit limit used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}><span style={{ width: `${percent}%` }} /></div></div><DialogActions close={close} edit={edit} /></DialogFrame>;
 }
 
-function DetailCard({ kind, purpose, name, lastFour, availableLabel, availableValue }: { kind: "debit" | "credit"; purpose?: string; name: string; lastFour?: string; availableLabel: string; availableValue: string }) { return <div className={`detail-payment-card is-${kind}`}><div className="detail-payment-identity"><span>{purpose ? `${kind} / ${purpose}` : kind}</span><h3>{displayBankName(name)}</h3><strong>{masked(lastFour)}</strong></div><div className="detail-payment-available"><small>{availableLabel}</small><b>{availableValue}</b></div></div>; }
+function DetailCard({ kind, purpose, name, lastFour, availableLabel, availableValue }: { kind: "debit" | "credit"; purpose?: string; name: string; lastFour?: string; availableLabel: string; availableValue: string }) { return <div className={`detail-payment-card is-${kind}`}><div className="detail-payment-identity"><span>{purpose ? `${kind} / ${purpose}` : kind}</span><h3>{displayBankName(name)}</h3>{masked(lastFour) && <strong>{masked(lastFour)}</strong>}</div><div className="detail-payment-available"><small>{availableLabel}</small><b>{availableValue}</b></div></div>; }
 function DetailMetric({ label, value }: { label: string; value: string }) { return <span><small>{label}</small><strong>{value}</strong></span>; }
 function DialogActions({ close, edit }: { close: () => void; edit: () => void }) { return <div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Close</button><button className="app-button" type="button" onClick={edit}><AppIcon name="edit" />Edit card</button></div>; }
 

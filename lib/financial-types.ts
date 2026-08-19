@@ -7,7 +7,7 @@ export type Amount = number;
 
 export type IncomeSource = { id: string; name: string; amount: Amount; day: number };
 export type Account = { id: string; name: string; type: "current" | "savings" | "cash"; balance: Amount; country?: string; currency?: Currency; lastFour?: string; purpose?: string };
-export type DebitCard = { id: string; name: string; country: string; currency: Currency; lastFour: string; linkedAccountId?: string; purpose?: string };
+export type DebitCard = { id: string; name: string; country: string; currency: Currency; lastFour?: string; linkedAccountId?: string; purpose?: string };
 export type CreditCard = { id: string; name: string; limit: Amount; owed: Amount; dueDay: number; country?: string; currency?: Currency; lastFour?: string; purpose?: string };
 export type CategoryBudget = { id: string; name: string; limit: Amount; month?: string };
 export type SavingsGoal = { id: string; name: string; target: Amount; saved: Amount; contribution: Amount; startDate?: string; targetDate?: string; priority: number };
@@ -20,7 +20,12 @@ export type Transaction = IncomeTransaction | ExpenseTransaction | TransferTrans
 
 export type FinancialProfile = {
   version: typeof FINANCIAL_PROFILE_VERSION;
+  country?: string;
   currency: Currency;
+  /** Day 1-28 on which the user's recurring monthly budget cycle begins. */
+  budgetStartDay?: number;
+  /** Overall monthly spending ceiling. Category budgets are optional allocations within it. */
+  monthlyBudget?: Amount;
   incomeSources: IncomeSource[];
   accounts: Account[];
   debitCards?: DebitCard[];
@@ -37,5 +42,5 @@ export const newLocalId = () => typeof crypto !== "undefined" && "randomUUID" in
 
 export function createFinancialProfile(): FinancialProfile {
   const now = new Date().toISOString();
-  return { version: FINANCIAL_PROFILE_VERSION, currency: "AED", incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], savingsGoals: [], onboarding: { currentStep: 1, completed: false }, createdAt: now, updatedAt: now, transactions: [] };
+  return { version: FINANCIAL_PROFILE_VERSION, country: "United Arab Emirates", currency: "AED", budgetStartDay: 1, incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], savingsGoals: [], onboarding: { currentStep: 0, completed: false }, createdAt: now, updatedAt: now, transactions: [] };
 }

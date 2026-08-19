@@ -6,6 +6,7 @@ import { AppIcon } from "@/components/app-icons";
 import { AssetCreationWorkflow } from "@/components/cards-accounts-view";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { MoneyInput } from "@/components/money-input";
+import { SavingsGoalForm } from "@/components/savings-goal-form";
 import { AddTransactionButton, AllTransactionsDialog } from "@/components/transactions-ui";
 import { useModalDialog } from "@/components/use-modal-dialog";
 import { budgetCategoriesForMonth, categoryBudgetPosition, hasBudgetSnapshot, monthlyBudgetPosition, replaceBudgetSnapshot } from "@/lib/financial-budget";
@@ -13,7 +14,7 @@ import { calculateActualSummary, calculateFinancialSummary, formatMoney } from "
 import { financialReferenceDate, financialReferenceMonth } from "@/lib/financial-date";
 import { profileSavingsGoalStatus } from "@/lib/financial-goal-status";
 import { type PlanAction, type PlanTab } from "@/lib/financial-navigation";
-import { newLocalId, type CategoryBudget, type FinancialProfile, type SavingsGoal, type Transaction } from "@/lib/financial-types";
+import { type CategoryBudget, type FinancialProfile, type SavingsGoal, type Transaction } from "@/lib/financial-types";
 
 const monthLabel = (month: string) => new Date(`${month}-15T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
@@ -365,20 +366,8 @@ function SavingsGoals({ profile, goals, add }: { profile: FinancialProfile; goal
 function SavingsGoalDialog({ profile, close }: { profile: FinancialProfile; close: () => void }) {
   const { save } = useFinancialProfile();
   const dialogRef = useModalDialog<HTMLElement>(close);
-  const [name, setName] = useState("");
-  const [target, setTarget] = useState(0);
-  const [saved, setSaved] = useState(0);
-  const [contribution, setContribution] = useState(0);
-  const [targetDate, setTargetDate] = useState("");
-  const [error, setError] = useState("");
-  const submit = () => {
-    if (!name.trim()) return setError("Add a name for this savings goal.");
-    if (target <= 0) return setError("Enter a target amount above zero.");
-    if (saved < 0 || saved > target) return setError("The saved amount must be between zero and the target.");
-    const goal: SavingsGoal = { id: newLocalId(), name: name.trim(), target, saved, contribution, startDate: financialReferenceDate(profile), targetDate: targetDate || undefined, priority: profile.savingsGoals.length + 1 };
-    if (save({ ...profile, savingsGoals: [...profile.savingsGoals, goal] })) close();
-  };
-  return <div className="dialog-backdrop app-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section ref={dialogRef} tabIndex={-1} className="confirm-dialog savings-goal-dialog" role="dialog" aria-modal="true" aria-labelledby="add-savings-goal-title"><div className="repeat-card-heading"><div><p className="app-eyebrow">Savings goals</p><h2 id="add-savings-goal-title">Add savings goal</h2></div><button className="dialog-close-button" type="button" onClick={close} aria-label="Close savings goal form"><AppIcon name="close" /></button></div><div className="savings-goal-fields"><label className="form-field savings-goal-field-wide">Goal name<input value={name} onChange={(event) => { setName(event.target.value); setError(""); }} placeholder="e.g. Emergency fund" /></label><label className="form-field">Target amount<MoneyInput value={target} onValueChange={setTarget} placeholder="0.00" /></label><label className="form-field">Already saved<MoneyInput value={saved} onValueChange={setSaved} placeholder="0.00" /></label><label className="form-field">Monthly contribution<MoneyInput value={contribution} onValueChange={setContribution} placeholder="0.00" /></label><label className="form-field">Target date (optional)<input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} /></label></div>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>Add goal</button></div></section></div>;
+  const persist = (goal: SavingsGoal) => { if (save({ ...profile, savingsGoals: [...profile.savingsGoals, goal] })) close(); };
+  return <div className="dialog-backdrop app-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section ref={dialogRef} tabIndex={-1} className="confirm-dialog savings-goal-dialog" role="dialog" aria-modal="true" aria-labelledby="add-savings-goal-title"><div className="repeat-card-heading"><div><p className="app-eyebrow">Savings goals</p><h2 id="add-savings-goal-title">Add savings goal</h2></div><button className="dialog-close-button" type="button" onClick={close} aria-label="Close savings goal form"><AppIcon name="close" /></button></div><SavingsGoalForm profile={profile} onCancel={close} onSave={persist} /></section></div>;
 }
 
 function SavingsProgressDialog({ goal, close }: { goal: SavingsGoal; close: () => void }) {
