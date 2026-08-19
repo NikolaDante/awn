@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateActualSummary, cardLedgerValid } from "../lib/financial-calculations.ts";
 import { createFinancialProfile } from "../lib/financial-types.ts";
-import { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage } from "../lib/financial-storage-core.ts";
+import { financialStorageKey, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage } from "../lib/financial-storage-core.ts";
 import { hasLinkedAccountActivity, hasLinkedCardActivity, removedFinancialReference, transactionHistoryDetail, transactionHistoryLabel } from "../lib/financial-reference-guards.ts";
 
 const profile = () => {
@@ -72,7 +72,9 @@ test("migrates a valid version 1 profile without losing planning data", () => {
 
 test("rejects corrupted and unsupported profiles", () => { assert.equal(isFinancialProfile({ version: 2 }), false); assert.equal(isFinancialProfile({ ...profile(), version: 99 }), false); assert.equal(migrateLegacyProfile({ version: 99 }), null); });
 
-test("reset removes only AWN financial keys", () => { const removed: string[] = []; resetFinancialStorage({ removeItem: (key) => removed.push(key) }); assert.deepEqual(removed.sort(), [FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY].sort()); assert.ok(!removed.includes("unrelated.preference")); });
+test("financial storage is scoped to the authenticated user", () => { assert.notEqual(financialStorageKey("user-a"), financialStorageKey("user-b")); });
+
+test("reset removes only the authenticated user's financial profile", () => { const removed: string[] = []; resetFinancialStorage({ removeItem: (key) => removed.push(key) }, "user-a"); assert.deepEqual(removed, [financialStorageKey("user-a")]); assert.ok(!removed.includes(financialStorageKey("user-b"))); assert.ok(!removed.includes("unrelated.preference")); });
 
 test("manual savings progress changes only the selected goal", () => { const value = profile(); value.savingsGoals = [{ id: "goal", name: "Trip", target: 100000, saved: 10000, contribution: 5000, priority: 1 }]; const before = calculateActualSummary(value, "2026-08"); value.savingsGoals = value.savingsGoals.map((goal) => ({ ...goal, saved: 40000 })); assert.equal(value.savingsGoals[0].saved, 40000); assert.deepEqual(calculateActualSummary(value, "2026-08"), before); });
 
