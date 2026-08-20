@@ -874,7 +874,7 @@
 
 .transaction-form .transaction-type {
   flex:none;
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:4px;
   margin:0 28px 18px;
   padding:4px;
@@ -4524,6 +4524,26 @@
   cursor:pointer;
 }
 
+.cash-section-content {
+  display:grid;
+  grid-template-columns:minmax(190px,.7fr) minmax(260px,1.4fr) auto;
+  align-items:center;
+  gap:22px;
+  min-height:var(--awn-expandable-min-height);
+  padding:var(--awn-expandable-padding);
+}
+
+.cash-section-content h2 { margin:0; font-size:var(--awn-section-title-size); line-height:1.15; font-weight:590; letter-spacing:-.04em; }
+.cash-section-balance { display:grid; justify-items:end; gap:3px; color:var(--awn-muted); font-size:var(--awn-small-size); }
+.cash-section-balance strong { color:var(--awn-text); font-size:1rem; }
+
+@media (max-width:640px) {
+  .cash-section-content { grid-template-columns:1fr auto; gap:14px; }
+  .cash-section-content > div:first-child { grid-column:1; }
+  .cash-section-balance { grid-column:2; grid-row:1; }
+  .cash-section-content > .app-button { grid-column:1/-1; width:100%; }
+}
+
 .accounts-section-row > summary::-webkit-details-marker {
   display:none;
 }
@@ -5668,7 +5688,7 @@
 .transaction-form > .transaction-type {
   display:grid;
   flex:none;
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:4px;
   margin:0 28px 18px;
   padding:4px;

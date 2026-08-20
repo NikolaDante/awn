@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { normalizeBudgetSnapshots } from "@/lib/financial-budget";
 import { financialReferenceMonth } from "@/lib/financial-date";
 import { normalizeFinancialPurposes } from "@/lib/financial-purpose";
+import { normalizeLedgerProfile } from "@/lib/financial-ledger";
 import type { FinancialProfile } from "@/lib/financial-types";
 import { removedFinancialReference } from "@/lib/financial-reference-guards";
 import { loadFinancialProfile, resetFinancialProfile, saveFinancialProfile } from "@/lib/financial-storage";
@@ -19,7 +20,7 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
   useEffect(() => {
     queueMicrotask(() => { const result = loadFinancialProfile(ownerId); profileRef.current = result.profile; setProfile(result.profile); setIssue(result.issue); setReady(true); });
   }, [ownerId]);
-  const save = useCallback((next: FinancialProfile) => { const withPurposes = normalizeFinancialPurposes(next); const normalized = normalizeBudgetSnapshots(withPurposes, financialReferenceMonth(withPurposes)); if (profileRef.current && removedFinancialReference(profileRef.current, normalized)) return false; const updated = { ...normalized, updatedAt: new Date().toISOString() }; const saved = saveFinancialProfile(ownerId, updated); if (saved) { profileRef.current = updated; setProfile(updated); setIssue(null); } else setIssue("AWN could not save this plan in this browser."); return saved; }, [ownerId]);
+  const save = useCallback((next: FinancialProfile) => { const withPurposes = normalizeLedgerProfile(normalizeFinancialPurposes(next)); const normalized = normalizeBudgetSnapshots(withPurposes, financialReferenceMonth(withPurposes)); if (profileRef.current && removedFinancialReference(profileRef.current, normalized)) return false; const updated = { ...normalized, updatedAt: new Date().toISOString() }; const saved = saveFinancialProfile(ownerId, updated); if (saved) { profileRef.current = updated; setProfile(updated); setIssue(null); } else setIssue("AWN could not save this plan in this browser."); return saved; }, [ownerId]);
   const reset = useCallback(() => { resetFinancialProfile(ownerId); profileRef.current = null; setProfile(null); setIssue(null); }, [ownerId]);
   return <FinancialContext.Provider value={{ profile, ready, issue, save, reset }}>{children}</FinancialContext.Provider>;
 }

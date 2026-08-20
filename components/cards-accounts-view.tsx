@@ -5,11 +5,13 @@ import { AppIcon } from "@/components/app-icons";
 import { PageHeader } from "@/components/application-ui";
 import { FinancialItemForm, type FinancialItem } from "@/components/financial-item-form";
 import { useFinancialProfile } from "@/components/financial-provider";
+import { MoneyInput } from "@/components/money-input";
 import { useModalDialog } from "@/components/use-modal-dialog";
 import { calculateActualSummary, formatMoney } from "@/lib/financial-calculations";
 import { financialReferenceDate, financialReferenceMonth } from "@/lib/financial-date";
 import { displayCountry } from "@/lib/financial-institutions";
 import { hasLinkedAccountActivity, hasLinkedCardActivity, removalGuardMessage } from "@/lib/financial-reference-guards";
+import { setCurrentCashBalance } from "@/lib/financial-ledger";
 import { type Account, type CreditCard, type Currency, type DebitCard, type FinancialProfile } from "@/lib/financial-types";
 
 type Editor = { kind: "account"; value?: Account } | { kind: "debit"; value?: DebitCard } | { kind: "credit"; value?: CreditCard };
@@ -57,6 +59,7 @@ export function AccountsCardsView({ initialAction }: { initialAction?: "add" }) 
   const [choosingAsset, setChoosingAsset] = useState(initialAction === "add");
   const [viewAll, setViewAll] = useState<ViewAll>();
   const [deleteError, setDeleteError] = useState("");
+  const [cashEditing, setCashEditing] = useState(false);
 
   const header = <PageHeader title="Cards & Accounts" eyebrow="Where your money lives"><button className="app-button app-button-secondary" type="button" onClick={() => setEditor({ kind: "account" })}><AppIcon name="plus" />Add account</button><button className="app-button" type="button" onClick={() => setChoosingCard(true)}><AppIcon name="plus" />Add card</button></PageHeader>;
 
@@ -95,10 +98,11 @@ export function AccountsCardsView({ initialAction }: { initialAction?: "add" }) 
   return <>
     {header}
     <div className="accounts-section-list">
+      <CashSection balance={actual.cash} profile={profile} edit={() => setCashEditing(true)} />
       <ExpandableSection title="Accounts" eyebrow="Accounts" metrics={[`${profile.accounts.length} ${profile.accounts.length === 1 ? "account" : "accounts"}`, `${formatMoney(positiveBalance, profile.currency)} total available`]}>
         <div className="account-info-grid">
           {profile.accounts.slice(0, inlineItemLimit).map((account) => renderAccount(account))}
-          {!profile.accounts.length && <SectionEmpty title="No accounts saved" text="Add a current, savings, or cash account using only basic manual information." />}
+          {!profile.accounts.length && <SectionEmpty title="No accounts saved" text="Add a current or savings account using only basic manual information." />}
         </div>
         <SectionActions addLabel="Add account" add={() => setEditor({ kind: "account" })} viewAllLabel={profile.accounts.length > inlineItemLimit ? "View all accounts" : undefined} viewAll={() => setViewAll("account")} />
       </ExpandableSection>
@@ -128,7 +132,19 @@ export function AccountsCardsView({ initialAction }: { initialAction?: "add" }) 
     {editor && <EditorDialog editor={editor} profile={profile} save={save} close={() => setEditor(undefined)} />}
     {detail && <CardDetailDialog detail={detail} profile={profile} accounts={actual.accounts} cards={actual.cards} availableCredit={actual.availableCredit} close={() => setDetail(undefined)} edit={() => { setEditor(detail.kind === "debit" ? { kind: "debit", value: detail.value } : { kind: "credit", value: detail.value }); setDetail(undefined); }} />}
     {deleting && <DeleteDialog target={deleting} error={deleteError} close={() => { setDeleting(undefined); setDeleteError(""); }} confirm={remove} />}
+    {cashEditing && <CashBalanceDialog profile={profile} current={actual.cash} save={save} close={() => setCashEditing(false)} />}
   </>;
+}
+
+function CashSection({ balance, profile, edit }: { balance: number; profile: FinancialProfile; edit: () => void }) {
+  return <section className="accounts-section-row cash-section-row" aria-labelledby="cash-section-title"><div className="cash-section-content"><div><p className="app-eyebrow">Cash</p><h2 id="cash-section-title">Cash</h2></div><div className="cash-section-balance"><span>Cash balance</span><strong>{formatMoney(balance, profile.currency)}</strong></div><button className="app-button app-button-secondary" type="button" onClick={edit}><AppIcon name="edit" />Edit balance</button></div></section>;
+}
+
+function CashBalanceDialog({ profile, current, save, close }: { profile: FinancialProfile; current: number; save: (profile: FinancialProfile) => boolean; close: () => void }) {
+  const [balance, setBalance] = useState(current);
+  const [error, setError] = useState("");
+  const submit = () => { const result = setCurrentCashBalance(profile, balance); if (!result.ok) return setError(result.error); if (save(result.profile)) close(); };
+  return <DialogFrame title="Edit cash balance" eyebrow="Cash" close={close} className="cash-balance-dialog"><label className="form-field">Current cash balance<MoneyInput value={balance} onValueChange={(value) => { setBalance(value); setError(""); }} /></label><p className="form-help">Use this for a manual correction. AWN will not create a fake transaction.</p>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>Save balance</button></div></DialogFrame>;
 }
 
 function SectionActions({ addLabel, add, viewAllLabel, viewAll }: { addLabel: string; add: () => void; viewAllLabel?: string; viewAll: () => void }) {
@@ -175,7 +191,7 @@ function CardChoiceDialog({ close, choose }: { close: () => void; choose: (kind:
 }
 
 function AssetChoiceDialog({ close, choose }: { close: () => void; choose: (kind: "account" | "debit" | "credit") => void }) {
-  return <DialogFrame title="Add account or card" eyebrow="Choose what to add" close={close} className="card-choice-dialog"><div className="card-choice-list"><button type="button" onClick={() => choose("account")}><span><AppIcon name="bank" /></span><span><strong>Account</strong><small>Add a current, savings, or cash account.</small></span><AppIcon name="arrow" /></button><button type="button" onClick={() => choose("debit")}><span><AppIcon name="card" /></span><span><strong>Debit card</strong><small>Optionally link it to an existing account.</small></span><AppIcon name="arrow" /></button><button type="button" onClick={() => choose("credit")}><span><AppIcon name="card" /></span><span><strong>Credit card</strong><small>Track the limit, amount owed, and available credit.</small></span><AppIcon name="arrow" /></button></div></DialogFrame>;
+  return <DialogFrame title="Add account or card" eyebrow="Choose what to add" close={close} className="card-choice-dialog"><div className="card-choice-list"><button type="button" onClick={() => choose("account")}><span><AppIcon name="bank" /></span><span><strong>Account</strong><small>Add a current or savings account.</small></span><AppIcon name="arrow" /></button><button type="button" onClick={() => choose("debit")}><span><AppIcon name="card" /></span><span><strong>Debit card</strong><small>Optionally link it to an existing account.</small></span><AppIcon name="arrow" /></button><button type="button" onClick={() => choose("credit")}><span><AppIcon name="card" /></span><span><strong>Credit card</strong><small>Track the limit, amount owed, and available credit.</small></span><AppIcon name="arrow" /></button></div></DialogFrame>;
 }
 
 export function AssetCreationWorkflow({ close }: { close: () => void }) {

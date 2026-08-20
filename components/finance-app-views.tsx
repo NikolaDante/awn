@@ -3,20 +3,22 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AppIcon } from "@/components/app-icons";
+import { AnimatedMoney } from "@/components/animated-money";
 import { AssetCreationWorkflow } from "@/components/cards-accounts-view";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { MoneyInput } from "@/components/money-input";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
-import { AddTransactionButton, AllTransactionsDialog } from "@/components/transactions-ui";
+import { AddTransactionButton, AllTransactionsDialog, TransactionForm } from "@/components/transactions-ui";
 import { useModalDialog } from "@/components/use-modal-dialog";
 import { budgetCategoriesForMonth, categoryBudgetPosition, hasBudgetSnapshot, monthlyBudgetPosition, replaceBudgetSnapshot } from "@/lib/financial-budget";
 import { calculateActualSummary, calculateFinancialSummary, formatMoney } from "@/lib/financial-calculations";
-import { financialReferenceDate, financialReferenceMonth } from "@/lib/financial-date";
+import { budgetPeriodForDate, budgetPeriodForKey, dateInBudgetPeriod, financialReferenceDate, financialReferenceMonth, financialReferencePeriod } from "@/lib/financial-date";
+import { mutateLedger } from "@/lib/financial-ledger";
 import { profileSavingsGoalStatus } from "@/lib/financial-goal-status";
+import { transactionHistoryLabel } from "@/lib/financial-reference-guards";
 import { type PlanAction, type PlanTab } from "@/lib/financial-navigation";
 import { type CategoryBudget, type FinancialProfile, type SavingsGoal, type Transaction } from "@/lib/financial-types";
 
-const monthLabel = (month: string) => new Date(`${month}-15T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
 
@@ -42,12 +44,13 @@ function useProfileState() {
 }
 
 function realMonths(profile: FinancialProfile): MonthSummary[] {
-  const months = [...new Set(profile.transactions.map((item) => item.date.slice(0, 7)))].sort().reverse();
+  const months = [...new Set(profile.transactions.map((item) => budgetPeriodForDate(profile.budgetStartDay, item.date).key))].sort().reverse();
   return months.map((month) => {
+    const period = budgetPeriodForKey(profile.budgetStartDay, month);
     const categoryBudgets = budgetCategoriesForMonth(profile, month);
     const budget = hasBudgetSnapshot(profile, month) ? sum(categoryBudgets.map((item) => item.limit)) : null;
     const actual = calculateActualSummary(profile, month);
-    const transactions = profile.transactions.filter((item) => item.date.startsWith(month));
+    const transactions = profile.transactions.filter((item) => dateInBudgetPeriod(item.date, period));
     const expenses = transactions.filter((item): item is Extract<Transaction, { type: "expense" }> => item.type === "expense");
     const categories = Object.entries(actual.categorySpending).sort((a, b) => b[1] - a[1]);
     return { month, income: actual.income, spent: actual.expenses, budget, highestExpense: Math.max(0, ...expenses.map((item) => item.amount)), topCategory: categories[0]?.[0] ?? "No spending yet", categorySpending: actual.categorySpending, transactionCount: transactions.length, categoryBudgets, transactions };
@@ -55,7 +58,7 @@ function realMonths(profile: FinancialProfile): MonthSummary[] {
 }
 
 function historyFor(profile: FinancialProfile) {
-  return realMonths(profile).filter((item) => item.month < financialReferenceMonth(profile));
+  return realMonths(profile).filter((item) => budgetPeriodForKey(profile.budgetStartDay, item.month).end < financialReferencePeriod(profile).start);
 }
 
 function Status({ value, label }: { value: "good" | "watch" | "over" | "neutral"; label: string }) {
@@ -71,11 +74,13 @@ function EmptyPanel({ title, text, action, href, onAction }: { title: string; te
 }
 
 function TransactionRow({ item, profile }: { item: Transaction; profile: FinancialProfile }) {
-  const title = item.note || (item.type === "income" ? item.incomeSourceName || "Income" : item.type === "expense" ? item.category : item.type === "transfer" ? "Account transfer" : "Card payment");
+  const title = item.note || transactionHistoryLabel(item);
   const detail = item.type === "expense" ? item.category : item.type === "income" ? "Income" : item.type === "transfer" ? "Transfer" : "Credit card";
   const accountName = (id: string | undefined) => id ? profile.accounts.find((account) => account.id === id)?.name ?? "Former account" : "Unlinked";
   const cardName = (id: string | undefined) => id ? profile.creditCards.find((card) => card.id === id)?.name ?? "Former credit card" : "Unlinked";
-  const accountLabel = item.type === "income" ? `To ${accountName(item.destinationAccountId)}` : item.type === "expense" ? item.cardId ? cardName(item.cardId) : accountName(item.accountId) : item.type === "transfer" ? `${accountName(item.sourceAccountId)} to ${accountName(item.destinationAccountId)}` : `${accountName(item.payingAccountId)} to ${cardName(item.receivingCardId)}`;
+  const debitName = (id: string | undefined) => id ? profile.debitCards?.find((card) => card.id === id)?.name ?? "Former debit card" : "Unlinked";
+  const endpoint = (kind: string | undefined, id: string | undefined) => kind === "cash" ? "Cash" : kind === "account" ? accountName(id) : kind === "debit" ? debitName(id) : kind === "credit" ? cardName(id) : "Unlinked";
+  const accountLabel = item.type === "income" ? `To ${item.destinationKind ? endpoint(item.destinationKind, item.destinationId) : accountName(item.destinationAccountId)}` : item.type === "expense" ? item.sourceKind ? endpoint(item.sourceKind, item.sourceId) : item.cardId ? cardName(item.cardId) : accountName(item.accountId) : item.type === "transfer" ? `${endpoint(item.sourceKind ?? "account", item.sourceId ?? item.sourceAccountId)} to ${endpoint(item.destinationKind ?? "account", item.destinationId ?? item.destinationAccountId)}` : `${accountName(item.payingAccountId)} to ${cardName(item.receivingCardId)}`;
   const dateLabel = new Date(`${item.date}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
   const sign = item.type === "income" ? "+" : item.type === "expense" ? "-" : "";
   return <article className="activity-row"><span className={`activity-icon is-${item.type}`}><AppIcon name={item.type === "income" ? "income" : item.type === "expense" ? "expense" : "transfer"} /></span><div><strong>{title}</strong><small><span>{detail}</span><span>{accountLabel}</span><span>{dateLabel}</span></small></div><b className={item.type === "income" ? "positive" : item.type === "expense" ? "negative" : "neutral"}>{sign}{formatMoney(item.amount, profile.currency)}</b></article>;
@@ -91,24 +96,25 @@ export function DashboardView() {
   const profile = state.profile;
   const month = financialReferenceMonth(profile);
   const actual = calculateActualSummary(profile, month);
+  const period = financialReferencePeriod(profile);
   const plan = calculateFinancialSummary(profile, month);
-  const available = sum(Object.values(actual.accounts).filter((amount) => amount > 0));
+  const available = sum(Object.values(actual.accounts).filter((amount) => amount > 0)) + actual.cash;
   const owed = sum(Object.values(actual.cards));
   const budgetRemaining = plan.spendingBudget - actual.expenses;
   const totalSaved = sum(profile.savingsGoals.map((goal) => goal.saved));
   const totalTarget = sum(profile.savingsGoals.map((goal) => goal.target));
   const goals = [...profile.savingsGoals].sort((a, b) => a.priority - b.priority);
   const recent = [...profile.transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
-  const monthTransactions = profile.transactions.filter((item) => item.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const monthTransactions = profile.transactions.filter((item) => dateInBudgetPeriod(item.date, period)).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
   return <>{transactionsOpen && <AllTransactionsDialog close={() => setTransactionsOpen(false)} transactions={monthTransactions} profile={profile} />}
     {assetWorkflowOpen && <AssetCreationWorkflow close={() => setAssetWorkflowOpen(false)} />}
     {budgetWorkflowOpen && <MonthlyBudgetWorkflow profile={profile} close={() => setBudgetWorkflowOpen(false)} />}
     {goalWorkflowOpen && <SavingsGoalDialog profile={profile} close={() => setGoalWorkflowOpen(false)} />}
-    <section className="hero-balance"><div><p className="app-eyebrow">Money available</p><h2>{formatMoney(available, profile.currency)}</h2><p>Across accounts with a positive current balance</p></div><div className="hero-balance-side"><span>Budget remaining<strong className={budgetRemaining < 0 ? "negative" : ""}>{formatMoney(budgetRemaining, profile.currency)}</strong></span><Status value={budgetRemaining < 0 ? "over" : budgetRemaining < plan.spendingBudget * .15 ? "watch" : "good"} label={budgetRemaining < 0 ? "Over budget" : "On track"} /></div></section>
-    <section className="metric-grid" aria-label="Monthly summary">
-      <Metric label="Income this month" value={formatMoney(actual.income, profile.currency)} detail="Recorded income" tone="green" icon="income" />
-      <Metric label="Spent this month" value={formatMoney(actual.expenses, profile.currency)} detail="Recorded expenses" tone="coral" icon="expense" />
-      <Metric label="Net position" value={formatMoney(actual.moneyLeft, profile.currency)} detail="Income minus expenses" icon="transactions" />
+    <section className="hero-balance"><div><p className="app-eyebrow">Money available</p><h2><AnimatedMoney value={available} currency={profile.currency} /></h2><p>Accounts plus cash you own. Credit debt stays separate.</p></div><div className="hero-balance-side"><span>Budget remaining<strong className={budgetRemaining < 0 ? "negative" : ""}>{formatMoney(budgetRemaining, profile.currency)}</strong></span><Status value={budgetRemaining < 0 ? "over" : budgetRemaining < plan.spendingBudget * .15 ? "watch" : "good"} label={budgetRemaining < 0 ? "Over budget" : "On track"} /></div></section>
+    <section className="metric-grid" aria-label="Budget-period summary">
+      <Metric label="Income this period" value={formatMoney(actual.income, profile.currency)} detail={period.label} tone="green" icon="income" />
+      <Metric label="Spent this period" value={formatMoney(actual.expenses, profile.currency)} detail={period.label} tone="coral" icon="expense" />
+      <Metric label="Financial position" value={formatMoney(actual.currentPosition, profile.currency)} detail="Opening position + income − expenses" icon="transactions" />
       <Metric label="Credit card balance" value={formatMoney(owed, profile.currency)} detail="Total currently owed" tone="blue" icon="wallet" />
     </section>
     <section className="dashboard-grid">
@@ -132,12 +138,15 @@ export function HistoryView() {
 }
 
 function MonthCard({ month, profile, open = false }: { month: MonthSummary; profile: FinancialProfile; open?: boolean }) {
+  const { save } = useFinancialProfile();
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [transactionsDialogOpen, setTransactionsDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Transaction>();
   const budgetPosition = monthlyBudgetPosition(month.budget, month.spent);
   const budgetTone = budgetPosition.tone === "over" ? "negative" : budgetPosition.tone === "neutral" ? "neutral" : "positive";
   const budgetCopy = budgetPosition.difference === null ? "Not recorded" : formatMoney(budgetPosition.difference, profile.currency);
-  const days = new Date(Number(month.month.slice(0, 4)), Number(month.month.slice(5, 7)), 0).getDate();
+  const historyPeriod = budgetPeriodForKey(profile.budgetStartDay, month.month);
+  const days = Math.round((Date.parse(`${historyPeriod.end}T12:00:00Z`) - Date.parse(`${historyPeriod.start}T12:00:00Z`)) / 86400000) + 1;
   const highestExpense = [...month.transactions].filter((item) => item.type === "expense").sort((a, b) => b.amount - a.amount)[0];
   const highestExpenseTitle = highestExpense ? transactionTitle(highestExpense) : "No expenses recorded";
   const transactionCopy = `${month.transactionCount} ${month.transactionCount === 1 ? "transaction" : "transactions"}`;
@@ -146,8 +155,9 @@ function MonthCard({ month, profile, open = false }: { month: MonthSummary; prof
   const showCategoryWarning = categoryOverCount > 0;
   return <>
     {categoryDialogOpen && <HistoryCategoriesDialog month={month} profile={profile} close={() => setCategoryDialogOpen(false)} />}
-    {transactionsDialogOpen && <HistoryTransactionsDialog month={month} profile={profile} close={() => setTransactionsDialogOpen(false)} />}
-    <details className="month-card history-month-card" open={open}><summary><div><p className="app-eyebrow">Monthly summary</p><h2>{monthLabel(month.month)}</h2></div><div className="month-card-metrics"><span>Income<strong>{formatMoney(month.income, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(month.spent, profile.currency)}</strong></span><span>Net<strong className={month.income - month.spent >= 0 ? "positive" : "negative"}>{month.income - month.spent >= 0 ? "+" : ""}{formatMoney(month.income - month.spent, profile.currency)}</strong></span><span>{budgetPosition.metricLabel}<strong className={budgetTone}>{budgetCopy}</strong></span></div><div className="history-status-stack"><Status value={budgetPosition.tone} label={budgetPosition.statusLabel} />{showCategoryWarning && <span className="status-pill is-watch category-over-warning">{categoryOverCount} {categoryOverCount === 1 ? "category" : "categories"} over</span>}</div><span className="details-toggle" aria-hidden="true">+</span></summary>
+    {editing && <TransactionForm editing={editing} close={() => setEditing(undefined)} />}
+    {transactionsDialogOpen && <AllTransactionsDialog transactions={month.transactions} profile={profile} readOnly={false} close={() => setTransactionsDialogOpen(false)} edit={(item) => { setTransactionsDialogOpen(false); setEditing(item); }} remove={(item) => { if (!window.confirm("Delete this historical transaction? Its full financial effect will be reversed.")) return; const result = mutateLedger(profile, { kind: "delete", id: item.id }); if (result.ok) { save(result.profile); setTransactionsDialogOpen(false); } else window.alert(result.error); }} />}
+    <details className="month-card history-month-card" open={open}><summary><div><p className="app-eyebrow">Budget-period summary</p><h2>{budgetPeriodForKey(profile.budgetStartDay, month.month).label}</h2></div><div className="month-card-metrics"><span>Income<strong>{formatMoney(month.income, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(month.spent, profile.currency)}</strong></span><span>Net<strong className={month.income - month.spent >= 0 ? "positive" : "negative"}>{month.income - month.spent >= 0 ? "+" : ""}{formatMoney(month.income - month.spent, profile.currency)}</strong></span><span>{budgetPosition.metricLabel}<strong className={budgetTone}>{budgetCopy}</strong></span></div><div className="history-status-stack"><Status value={budgetPosition.tone} label={budgetPosition.statusLabel} />{showCategoryWarning && <span className="status-pill is-watch category-over-warning">{categoryOverCount} {categoryOverCount === 1 ? "category" : "categories"} over</span>}</div><span className="details-toggle" aria-hidden="true">+</span></summary>
       <div className="month-detail-grid"><Metric label="Highest expense" value={formatMoney(month.highestExpense, profile.currency)} detail={highestExpenseTitle} /><Metric label="Daily average" value={formatMoney(Math.round(month.spent / days), profile.currency)} detail={`Average across ${transactionCopy}`} /><Metric label="Top category" value={month.topCategory} detail="Highest total spending" /><Metric label="Budget difference" value={budgetPosition.difference === null ? "Not recorded" : formatMoney(budgetPosition.difference, profile.currency)} detail={budgetPosition.statusLabel} valueClassName={budgetPosition.tone === "over" ? "negative" : budgetPosition.tone === "good" ? "positive" : "neutral"} /></div>
       {topCategories.length > 0 && <div className="category-mini-list">{topCategories.map((category) => { const overBudget = category.spent > category.limit; return <div className={overBudget ? "is-over-budget" : undefined} key={category.id}><span>{category.name}</span><Progress value={month.spent ? category.spent / month.spent * 100 : 0} tone={overBudget ? "over" : "good"} label={`${category.name} share of spending`} /><strong className={overBudget ? "negative" : undefined}>{overBudget ? "-" : ""}{formatMoney(category.spent, profile.currency)}</strong></div>; })}</div>}
       <div className="history-detail-actions"><button className="app-button app-button-secondary" type="button" onClick={() => setCategoryDialogOpen(true)}>View all category expenses</button><button className="app-button" type="button" onClick={() => setTransactionsDialogOpen(true)}>View all transactions</button></div>
@@ -156,23 +166,7 @@ function MonthCard({ month, profile, open = false }: { month: MonthSummary; prof
 }
 
 function transactionTitle(item: Transaction) {
-  return item.note || (item.type === "income" ? item.incomeSourceName || "Income" : item.type === "expense" ? item.category : item.type === "transfer" ? "Account transfer" : "Card payment");
-}
-
-function historyTransactionCategory(item: Transaction) {
-  if (item.type === "expense") return item.category;
-  if (item.type === "income") return "Income";
-  if (item.type === "transfer") return "Transfer";
-  return "Credit card payment";
-}
-
-function historyTransactionAccount(profile: FinancialProfile, item: Transaction) {
-  const accountName = (id: string | undefined) => id ? profile.accounts.find((account) => account.id === id)?.name ?? "Former account" : "Unlinked";
-  const cardName = (id: string | undefined) => id ? profile.creditCards.find((card) => card.id === id)?.name ?? "Former credit card" : "Unlinked";
-  if (item.type === "income") return accountName(item.destinationAccountId);
-  if (item.type === "expense") return item.cardId ? cardName(item.cardId) : accountName(item.accountId);
-  if (item.type === "transfer") return `${accountName(item.sourceAccountId)} to ${accountName(item.destinationAccountId)}`;
-  return `${accountName(item.payingAccountId)} to ${cardName(item.receivingCardId)}`;
+  return item.note || transactionHistoryLabel(item);
 }
 
 function historyCategories(month: MonthSummary) {
@@ -226,29 +220,7 @@ function useHistoryDialog(close: () => void) {
 function HistoryCategoriesDialog({ month, profile, close }: { month: MonthSummary; profile: FinancialProfile; close: () => void }) {
   const categories = historyCategories(month);
   const dialogRef = useHistoryDialog(close);
-  return <div className="dialog-backdrop history-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }} onTouchMove={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}><section className="confirm-dialog history-category-dialog" role="dialog" aria-modal="true" aria-labelledby={`history-categories-${month.month}`} tabIndex={-1} ref={dialogRef}><div className="repeat-card-heading history-dialog-header"><div><p className="app-eyebrow">{monthLabel(month.month)}</p><h2 id={`history-categories-${month.month}`}>All category expenses</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close category expenses"><AppIcon name="close" /></button></div><div className="history-category-list history-dialog-scroll" tabIndex={0}>{categories.map((category) => { const position = categoryBudgetPosition(category.limit, category.spent); return <article key={category.id}><div className="history-category-heading"><strong>{category.name}</strong><Status value={position.tone} label={position.statusLabel} /></div><div className="history-category-values"><span>Budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(category.spent, profile.currency)}</strong></span><span>{position.differenceLabel}<strong className={position.kind === "over" || position.kind === "unbudgeted" ? "negative" : position.kind === "no-budget" ? "neutral" : "positive"}>{formatMoney(position.difference, profile.currency)}</strong></span></div>{position.percent !== null && <Progress value={position.percent} tone={position.tone === "neutral" ? "good" : position.tone} label={`${category.name} budget used`} />}</article>; })}</div></section></div>;
-}
-
-function HistoryTransactionsDialog({ month, profile, close }: { month: MonthSummary; profile: FinancialProfile; close: () => void }) {
-  const dialogRef = useHistoryDialog(close);
-  const [date, setDate] = useState("");
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("all");
-  const [account, setAccount] = useState("all");
-  const ordered = [...month.transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
-  const categories = [...new Set(ordered.map(historyTransactionCategory))].sort();
-  const accounts = [...new Set(ordered.map((item) => historyTransactionAccount(profile, item)))].sort();
-  const filtered = ordered.filter((item) => (!date || item.date === date) && transactionTitle(item).toLowerCase().includes(title.trim().toLowerCase()) && (category === "all" || historyTransactionCategory(item) === category) && (account === "all" || historyTransactionAccount(profile, item) === account));
-  const hasFilters = Boolean(date || title || category !== "all" || account !== "all");
-  const clear = () => { setDate(""); setTitle(""); setCategory("all"); setAccount("all"); };
-  return <div className="dialog-backdrop history-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }} onTouchMove={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}><section className="confirm-dialog history-transactions-dialog" role="dialog" aria-modal="true" aria-labelledby={`history-transactions-${month.month}`} tabIndex={-1} ref={dialogRef}><div className="history-transactions-fixed"><div className="repeat-card-heading history-dialog-header"><div><p className="app-eyebrow">{monthLabel(month.month)}</p><h2 id={`history-transactions-${month.month}`}>All transactions</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close transactions"><AppIcon name="close" /></button></div><div className="history-transaction-filters"><label className="form-field">Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><label className="form-field">Paid to / title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Search title" /></label><label className="form-field">Category<select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All categories</option>{categories.map((name) => <option key={name}>{name}</option>)}</select></label><label className="form-field">Account / Card<select value={account} onChange={(event) => setAccount(event.target.value)}><option value="all">All accounts and cards</option>{accounts.map((name) => <option key={name}>{name}</option>)}</select></label></div><div className="history-filter-summary"><span>{filtered.length} {filtered.length === 1 ? "transaction" : "transactions"}</span>{hasFilters && <button className="text-button" type="button" onClick={clear}>Clear filters</button>}</div></div>{filtered.length ? <div className="history-transaction-list history-dialog-scroll" tabIndex={0}>{filtered.map((item) => <HistoryTransactionRow key={item.id} item={item} profile={profile} />)}</div> : <section className="empty-panel history-dialog-empty history-dialog-scroll"><h2>No transactions found</h2><p>Try clearing one or more filters.</p>{hasFilters && <button className="app-button app-button-secondary" type="button" onClick={clear}>Clear filters</button>}</section>}</section></div>;
-}
-
-function HistoryTransactionRow({ item, profile }: { item: Transaction; profile: FinancialProfile }) {
-  const amountTone = item.type === "income" ? "positive" : item.type === "expense" ? "neutral" : "brand";
-  const amountPrefix = item.type === "income" ? "+" : item.type === "expense" ? "-" : "";
-  const date = new Date(`${item.date}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-  return <article><span className={`activity-icon is-${item.type}`}><AppIcon name={item.type === "income" ? "income" : item.type === "expense" ? "expense" : "transfer"} /></span><div className="history-transaction-copy"><strong>{transactionTitle(item)}</strong><small><span>{date}</span><span>{historyTransactionAccount(profile, item)}</span><span>{historyTransactionCategory(item)}</span></small></div><b className={amountTone}>{amountPrefix}{formatMoney(item.amount, profile.currency)}</b></article>;
+  return <div className="dialog-backdrop history-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }} onTouchMove={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}><section className="confirm-dialog history-category-dialog" role="dialog" aria-modal="true" aria-labelledby={`history-categories-${month.month}`} tabIndex={-1} ref={dialogRef}><div className="repeat-card-heading history-dialog-header"><div><p className="app-eyebrow">{budgetPeriodForKey(profile.budgetStartDay, month.month).label}</p><h2 id={`history-categories-${month.month}`}>All category expenses</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close category expenses"><AppIcon name="close" /></button></div><div className="history-category-list history-dialog-scroll" tabIndex={0}>{categories.map((category) => { const position = categoryBudgetPosition(category.limit, category.spent); return <article key={category.id}><div className="history-category-heading"><strong>{category.name}</strong><Status value={position.tone} label={position.statusLabel} /></div><div className="history-category-values"><span>Budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(category.spent, profile.currency)}</strong></span><span>{position.differenceLabel}<strong className={position.kind === "over" || position.kind === "unbudgeted" ? "negative" : position.kind === "no-budget" ? "neutral" : "positive"}>{formatMoney(position.difference, profile.currency)}</strong></span></div>{position.percent !== null && <Progress value={position.percent} tone={position.tone === "neutral" ? "good" : position.tone} label={`${category.name} budget used`} />}</article>; })}</div></section></div>;
 }
 
 function AddItemCard({ label, href, onClick }: { label: string; href?: string; onClick?: () => void }) {
@@ -293,7 +265,8 @@ export function PlanView({ initialTab = "budgets", initialAction }: { initialTab
   const categorySpending = actual.categorySpending;
   const spent = actual.expenses;
   const monthlyBudget = sum(categoryBudgets.map((category) => category.limit));
-  const categories = categoryBudgets.map((category) => ({ ...category, spent: categorySpending[category.name] ?? 0 }));
+  const budgetMap = new Map(categoryBudgets.map((category) => [category.name, category]));
+  const categories = [...new Set([...categoryBudgets.map((category) => category.name), ...Object.keys(categorySpending)])].map((name) => ({ id: budgetMap.get(name)?.id ?? `unbudgeted-${name}`, name, limit: budgetMap.get(name)?.limit ?? 0, month: activeMonth, spent: categorySpending[name] ?? 0 }));
   const applyBudgets = (next: CategoryBudget[]) => state.save(replaceBudgetSnapshot(profile, activeMonth, next));
   const applyMonthlyBudget = (budget: number) => applyBudgets(scaleMonthlyBudgetCategories(categoryBudgets, budget));
   return <><div className="segmented-control plan-tabs" role="tablist" aria-label="Plan section"><button role="tab" aria-selected={tab === "budgets"} onClick={() => setTab("budgets")}>Monthly budgets</button><button role="tab" aria-selected={tab === "savings"} onClick={() => setTab("savings")}>Savings goals</button></div>
@@ -318,9 +291,9 @@ function MonthlyBudgetPlanner({ month, profile, categories, budget, spent, canEd
   const status = percent > 100 ? "over" : percent >= 85 ? "watch" : "good";
   return <div className="plan-budget-workspace">
     <section className="content-panel action-card plan-budget-overview">
-      <div className="plan-budget-overview-header"><div><p className="app-eyebrow">{monthLabel(month)} budget</p><h2>Monthly spending plan</h2></div>{canEdit && <button className="text-button" type="button" onClick={editMonth}>Edit monthly budget <AppIcon name="arrow" /></button>}</div>
+      <div className="plan-budget-overview-header"><div><p className="app-eyebrow">{budgetPeriodForKey(profile.budgetStartDay, month).label}</p><h2>Monthly spending plan</h2></div>{canEdit && <button className="text-button" type="button" onClick={editMonth}>Edit monthly budget <AppIcon name="arrow" /></button>}</div>
       <div className="plan-budget-primary"><span>Remaining</span><strong className={remaining < 0 ? "negative" : undefined}>{formatMoney(Math.abs(remaining), profile.currency)} <small>{remaining < 0 ? "over" : "remaining"}</small></strong><p>of {formatMoney(budget, profile.currency)} monthly budget</p></div>
-      <Progress value={percent} tone={status} label={`${monthLabel(month)} monthly budget used`} />
+      <Progress value={percent} tone={status} label={`${budgetPeriodForKey(profile.budgetStartDay, month).label} budget used`} />
       <div className="plan-budget-overview-footer"><strong>{Math.round(percent)}% used</strong><div className="plan-budget-supporting"><span>Spent<strong>{formatMoney(spent, profile.currency)}</strong></span><span>Budget<strong>{formatMoney(budget, profile.currency)}</strong></span><span>Status<Status value={status} label={status === "over" ? "Over budget" : status === "watch" ? "Near limit" : "On track"} /></span><span>Warning{attention.length ? <Status value="watch" label={`${attention.length} ${attention.length === 1 ? "category" : "categories"} over`} /> : <strong>None</strong>}</span></div></div>
     </section>
     {attention.length > 0 && <section className="plan-budget-section"><div className="plan-budget-section-heading"><div><p className="app-eyebrow">Needs attention</p><h2>Categories over budget</h2></div></div><div className="plan-category-list is-attention">{attention.map((category) => <PlanCategoryRow key={category.id} category={category} profile={profile} edit={canEdit ? () => editCategory(category) : undefined} />)}</div></section>}
@@ -345,11 +318,12 @@ function CategoryBudgetDialog({ category, categories, monthlyBudget, spent, prof
   const dialogRef = useHistoryDialog(close);
   const [budget, setBudget] = useState(category.limit);
   const [error, setError] = useState("");
+  const exists = categories.some((item) => item.id === category.id);
   const currentTotal = sum(categories.map((item) => item.limit));
-  const nextTotal = currentTotal - category.limit + budget;
+  const nextTotal = currentTotal - (exists ? category.limit : 0) + budget;
   const exceedsBy = Math.max(0, nextTotal - monthlyBudget);
   const remaining = category.limit - spent;
-  const submit = () => { if (budget <= 0) return setError("Enter a category budget above zero."); const next = categories.map((item) => item.id === category.id ? { ...item, limit: budget } : item); if (save(next)) close(); };
+  const submit = () => { if (budget <= 0) return setError("Enter a category budget above zero."); const next = exists ? categories.map((item) => item.id === category.id ? { ...item, limit: budget } : item) : [...categories, { ...category, limit: budget }]; if (save(next)) close(); };
   return <div className="dialog-backdrop app-dialog-backdrop"><section className="confirm-dialog plan-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="category-budget-editor-title" tabIndex={-1} ref={dialogRef}><div className="repeat-card-heading"><div><p className="app-eyebrow">Category budget</p><h2 id="category-budget-editor-title">Edit {category.name}</h2></div><button className="dialog-close-button" type="button" onClick={close} aria-label="Close category budget editor"><AppIcon name="close" /></button></div><div className="plan-editor-context"><span>Category<strong>{category.name}</strong></span><span>Current budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Current spent<strong>{formatMoney(spent, profile.currency)}</strong></span><span>{remaining < 0 ? "Currently over" : "Currently remaining"}<strong className={remaining < 0 ? "negative" : "positive"}>{formatMoney(Math.abs(remaining), profile.currency)}</strong></span></div><label className="form-field">New budget amount<MoneyInput value={budget} onValueChange={(value) => { setBudget(value); setError(""); }} aria-invalid={!!error} /></label>{exceedsBy > 0 && <p className="form-message is-warning" role="status">Category budgets exceed your current monthly budget by {formatMoney(exceedsBy, profile.currency)}. Saving will update the monthly total.</p>}{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>Save changes</button></div></section></div>;
 }
 
@@ -391,7 +365,8 @@ export function InsightsView() {
   const spent = actual.expenses;
   const remaining = budget - spent;
   const percent = budget ? spent / budget * 100 : 0;
-  const categories = categoryBudgets.map((category) => ({ ...category, spent: categorySpending[category.name] ?? 0, remaining: category.limit - (categorySpending[category.name] ?? 0) }));
+  const budgetMap = new Map(categoryBudgets.map((category) => [category.name, category]));
+  const categories = [...new Set([...categoryBudgets.map((category) => category.name), ...Object.keys(categorySpending)])].map((name) => { const category = budgetMap.get(name); const spentForCategory = categorySpending[name] ?? 0; return { id: category?.id ?? `unbudgeted-${name}`, name, limit: category?.limit ?? 0, month, spent: spentForCategory, remaining: (category?.limit ?? 0) - spentForCategory }; });
   const orderedCategories = [...categories].sort((a, b) => b.spent - a.spent || a.name.localeCompare(b.name));
   const overBudget = categories.filter((category) => category.remaining < 0).sort((a, b) => a.remaining - b.remaining);
   const mostRoom = [...categories].sort((a, b) => b.remaining - a.remaining)[0];

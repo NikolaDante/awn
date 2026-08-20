@@ -2,13 +2,14 @@ import type { FinancialProfile } from "@/lib/financial-types";
 import { normalizeBudgetSnapshots } from "@/lib/financial-budget";
 import { financialReferenceMonth } from "@/lib/financial-date";
 import { normalizeFinancialPurposes } from "@/lib/financial-purpose";
+import { normalizeLedgerProfile } from "@/lib/financial-ledger";
 import { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, financialStorageKey, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage } from "@/lib/financial-storage-core";
 
 export { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, financialStorageKey, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage };
 type LoadResult = { profile: FinancialProfile | null; issue: string | null };
 
 function normalizeSettings(profile: FinancialProfile): FinancialProfile {
-  return { ...profile, country: profile.country ?? "United Arab Emirates", budgetStartDay: profile.budgetStartDay ?? 1, debitCards: profile.debitCards ?? [] };
+  return normalizeLedgerProfile({ ...profile, country: profile.country ?? "United Arab Emirates", budgetStartDay: profile.budgetStartDay ?? 1, cashBalance: profile.cashBalance ?? 0, debitCards: profile.debitCards ?? [] });
 }
 
 export function loadFinancialProfile(ownerId: string): LoadResult {

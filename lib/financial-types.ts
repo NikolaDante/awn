@@ -12,9 +12,12 @@ export type CreditCard = { id: string; name: string; limit: Amount; owed: Amount
 export type CategoryBudget = { id: string; name: string; limit: Amount; month?: string };
 export type SavingsGoal = { id: string; name: string; target: Amount; saved: Amount; contribution: Amount; startDate?: string; targetDate?: string; priority: number };
 export type TransactionBase = { id: string; amount: Amount; date: string; note?: string; createdAt: string; updatedAt: string };
-export type IncomeTransaction = TransactionBase & { type: "income"; incomeSourceId?: string; incomeSourceName?: string; destinationAccountId?: string };
-export type ExpenseTransaction = TransactionBase & { type: "expense"; category: string; accountId?: string; cardId?: string };
-export type TransferTransaction = TransactionBase & { type: "transfer"; sourceAccountId: string; destinationAccountId: string };
+export type AssetSourceKind = "cash" | "account";
+export type ExpenseSourceKind = AssetSourceKind | "debit" | "credit";
+export type TransferDestinationKind = AssetSourceKind | "credit";
+export type IncomeTransaction = TransactionBase & { type: "income"; incomeSourceId?: string; incomeSourceName?: string; destinationKind?: AssetSourceKind; destinationId?: string; /** Legacy v2 field. */ destinationAccountId?: string };
+export type ExpenseTransaction = TransactionBase & { type: "expense"; category: string; sourceKind?: ExpenseSourceKind; sourceId?: string; /** Legacy v2 fields. */ accountId?: string; cardId?: string };
+export type TransferTransaction = TransactionBase & { type: "transfer"; sourceKind?: AssetSourceKind; sourceId?: string; destinationKind?: TransferDestinationKind; destinationId?: string; /** Legacy v2 fields. */ sourceAccountId?: string; destinationAccountId?: string };
 export type CardPaymentTransaction = TransactionBase & { type: "card-payment"; payingAccountId: string; receivingCardId: string };
 export type Transaction = IncomeTransaction | ExpenseTransaction | TransferTransaction | CardPaymentTransaction;
 
@@ -27,6 +30,8 @@ export type FinancialProfile = {
   /** Overall monthly spending ceiling. Category budgets are optional allocations within it. */
   monthlyBudget?: Amount;
   incomeSources: IncomeSource[];
+  /** Opening cash position. Current cash is derived by the ledger. */
+  cashBalance?: Amount;
   accounts: Account[];
   debitCards?: DebitCard[];
   creditCards: CreditCard[];
@@ -42,5 +47,5 @@ export const newLocalId = () => typeof crypto !== "undefined" && "randomUUID" in
 
 export function createFinancialProfile(): FinancialProfile {
   const now = new Date().toISOString();
-  return { version: FINANCIAL_PROFILE_VERSION, country: "United Arab Emirates", currency: "AED", budgetStartDay: 1, incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], savingsGoals: [], onboarding: { currentStep: 0, completed: false }, createdAt: now, updatedAt: now, transactions: [] };
+  return { version: FINANCIAL_PROFILE_VERSION, country: "United Arab Emirates", currency: "AED", budgetStartDay: 1, cashBalance: 0, incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], savingsGoals: [], onboarding: { currentStep: 0, completed: false }, createdAt: now, updatedAt: now, transactions: [] };
 }

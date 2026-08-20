@@ -2,15 +2,21 @@
 
 import { useState } from "react";
 import { qaFinancialProfile, QA_BACKUP_STORAGE_KEY } from "@/lib/financial-qa-fixture";
-import { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY } from "@/lib/financial-storage";
+import { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, financialStorageKey } from "@/lib/financial-storage";
+import { createClient } from "@/lib/supabase/client";
 
 export function QaSeedControl() {
   const [status, setStatus] = useState("");
 
-  const seed = () => {
-    const current = window.localStorage.getItem(FINANCIAL_STORAGE_KEY);
+  const seed = async () => {
+    const { data } = await createClient().auth.getClaims();
+    const ownerId = typeof data?.claims?.sub === "string" ? data.claims.sub : null;
+    if (!ownerId) return setStatus("Sign in before loading the QA profile.");
+    const key = financialStorageKey(ownerId);
+    const current = window.localStorage.getItem(key) ?? window.localStorage.getItem(FINANCIAL_STORAGE_KEY);
     if (current) window.localStorage.setItem(QA_BACKUP_STORAGE_KEY, current);
-    window.localStorage.setItem(FINANCIAL_STORAGE_KEY, JSON.stringify(qaFinancialProfile));
+    window.localStorage.setItem(key, JSON.stringify(qaFinancialProfile));
+    window.localStorage.removeItem(FINANCIAL_STORAGE_KEY);
     window.localStorage.removeItem(LEGACY_FINANCIAL_STORAGE_KEY);
     setStatus(current ? `Previous financial profile backed up to ${QA_BACKUP_STORAGE_KEY}. Loading QA profile...` : "No existing financial profile was present. Loading QA profile...");
     window.setTimeout(() => window.location.assign("/dashboard"), 250);
