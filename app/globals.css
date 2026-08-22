@@ -1750,6 +1750,26 @@
   color:#554be2;
 }
 
+.panel-heading > .panel-text-action,
+.panel-text-action {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  min-height:44px;
+  padding:8px 4px;
+  color:var(--awn-violet);
+  font-size:.8rem;
+  font-weight:650;
+  line-height:1;
+  text-decoration:none;
+}
+
+.panel-text-action svg {
+  width:15px;
+  height:15px;
+}
+
 .icon-button,
 .mobile-menu-button,
 .menu-toggle {
@@ -2405,6 +2425,169 @@
   width:min(100%,580px);
 }
 
+.manage-budget-dialog {
+  display:flex;
+  flex-direction:column;
+  width:min(100%,760px);
+  max-height:min(90dvh,860px);
+  padding:0;
+  overflow:hidden;
+}
+
+.manage-budget-dialog > .repeat-card-heading {
+  flex:none;
+  margin:0;
+  padding:var(--awn-modal-padding) var(--awn-modal-padding) 20px;
+}
+
+.manage-budget-scroll {
+  display:grid!important;
+  justify-content:stretch!important;
+  gap:16px!important;
+  margin:0!important;
+  padding:0 var(--awn-modal-padding) 8px;
+  overflow-y:auto;
+}
+
+.manage-budget-scroll > .form-help {
+  margin:-7px 0 0;
+  color:var(--awn-muted);
+  font-size:var(--awn-small-size);
+  line-height:1.5;
+}
+
+.budget-manager-summary {
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px!important;
+  margin:2px 0 0!important;
+}
+
+.budget-manager-summary span {
+  display:grid;
+  gap:5px;
+  min-width:0;
+  padding:14px;
+  border:1px solid rgba(16,20,24,.07);
+  border-radius:16px;
+  background:rgba(102,92,246,.035);
+  color:var(--awn-muted);
+  font-size:var(--awn-small-size);
+}
+
+.budget-manager-summary strong {
+  overflow-wrap:anywhere;
+  color:var(--awn-text);
+  font-size:.9rem;
+}
+
+.budget-manager-summary strong.negative {
+  color:var(--awn-danger);
+}
+
+.budget-manager-categories {
+  display:grid;
+  gap:14px;
+  margin-top:2px;
+  padding-top:18px;
+  border-top:1px solid var(--component-border);
+  scroll-margin-top:20px;
+}
+
+.budget-manager-categories .editor-heading {
+  margin:0;
+}
+
+.budget-manager-categories .editor-heading > div {
+  display:grid;
+  gap:5px;
+}
+
+.budget-manager-categories .editor-heading h3 {
+  margin:0;
+  font-size:var(--awn-section-title-size);
+  font-weight:590;
+  letter-spacing:-.04em;
+}
+
+.budget-manager-categories .editor-heading .text-button {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  flex:none;
+}
+
+.budget-manager-categories .editor-heading .text-button svg {
+  width:14px;
+  height:14px;
+}
+
+.manage-budget-dialog .budget-allocation-form {
+  display:grid!important;
+  justify-content:stretch!important;
+  gap:14px!important;
+  margin:0!important;
+  padding:16px;
+  border:1px solid rgba(102,92,246,.13);
+  border-radius:18px;
+  background:rgba(102,92,246,.035);
+}
+
+.manage-budget-dialog .budget-allocation-form > .confirm-dialog-actions {
+  margin:0;
+}
+
+.budget-allocation-list {
+  display:grid;
+  gap:8px;
+}
+
+.budget-allocation-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  min-height:58px;
+  padding:10px 12px 10px 15px;
+  border:1px solid var(--component-border);
+  border-radius:16px;
+  background:#fff;
+}
+
+.budget-allocation-row > div:first-child {
+  display:grid;
+  gap:4px;
+  min-width:0;
+}
+
+.budget-allocation-row strong {
+  color:var(--awn-text);
+  font-size:.86rem;
+}
+
+.budget-allocation-row span {
+  color:var(--awn-muted);
+  font-size:var(--awn-small-size);
+}
+
+.budget-allocation-row > div:last-child {
+  display:flex;
+  align-items:center;
+  gap:2px;
+}
+
+.budget-allocation-row .text-button.is-danger {
+  color:var(--awn-danger);
+}
+
+.manage-budget-dialog > .confirm-dialog-actions {
+  flex:none;
+  margin:0;
+  padding:18px var(--awn-modal-padding) var(--awn-modal-padding);
+  border-top:1px solid var(--component-border);
+  background:#fff;
+}
+
 .plan-editor-dialog > .repeat-card-heading,
 .plan-categories-dialog > .repeat-card-heading {
   display:flex;
@@ -2998,6 +3181,50 @@
     grid-template-columns:1fr;
   }
 
+  .manage-budget-dialog {
+    max-height:94dvh;
+  }
+
+  .manage-budget-dialog > .repeat-card-heading {
+    padding:24px 20px 16px;
+  }
+
+  .manage-budget-scroll {
+    padding:0 20px 6px;
+  }
+
+  .budget-manager-summary {
+    grid-template-columns:1fr;
+  }
+
+  .budget-manager-categories .editor-heading,
+  .budget-allocation-row {
+    align-items:flex-start;
+  }
+
+  .budget-manager-categories .editor-heading {
+    flex-direction:column;
+  }
+
+  .budget-manager-categories .editor-heading .text-button {
+    justify-content:flex-start;
+    max-width:none;
+  }
+
+  .budget-allocation-row {
+    flex-direction:column;
+    gap:8px;
+  }
+
+  .budget-allocation-row > div:last-child {
+    width:100%;
+    justify-content:flex-end;
+  }
+
+  .manage-budget-dialog > .confirm-dialog-actions {
+    padding:14px 20px 20px;
+  }
+
   .plan-categories-dialog {
     max-height:92dvh;
   }
@@ -3574,6 +3801,9 @@
   font-size:1.2rem;
   letter-spacing:-.04em;
 }
+.dashboard-page .hero-balance-side .is-no-budget strong {
+  color:#fff;
+}
 .dashboard-page .metric-grid {
   position:relative;
   gap:var(--awn-grid-gap);
@@ -3712,6 +3942,11 @@
 }
 .dashboard-page .panel-heading > a {
   color:var(--awn-violet);
+}
+.dashboard-page .panel-heading > .panel-text-action {
+  color:var(--awn-violet);
+  font-size:.8rem;
+  font-weight:650;
 }
 .dashboard-page .savings-total strong {
   font-size:clamp(1.75rem,3vw,2rem);

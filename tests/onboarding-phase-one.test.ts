@@ -10,6 +10,7 @@ import { createFinancialProfile, type Account, type CreditCard, type DebitCard, 
 
 const root = process.cwd();
 const onboardingSource = readFileSync(join(root, "components/onboarding-flow.tsx"), "utf8");
+const categoryBudgetSource = readFileSync(join(root, "components/category-budget-form.tsx"), "utf8");
 const financialItemSource = readFileSync(join(root, "components/financial-item-form.tsx"), "utf8");
 const savingsGoalSource = readFileSync(join(root, "components/savings-goal-form.tsx"), "utf8");
 
@@ -113,7 +114,7 @@ test("validation reserves a stable message area and positive amounts fail with s
   assert.match(fieldSource, /field-message-slot/);
   assert.match(styles, /stable-form-field \.field-message-slot[\s\S]*min-height/);
   assert.match(financialItemSource, /Credit limit must be above zero/);
-  assert.match(onboardingSource, /Monthly limit must be above zero/);
+  assert.match(categoryBudgetSource, /Monthly limit must be above zero/);
   assert.match(savingsGoalSource, /Target amount must be above zero/);
 });
 

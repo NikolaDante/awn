@@ -6,12 +6,13 @@ import { AppIcon } from "@/components/app-icons";
 import { AnimatedMoney } from "@/components/animated-money";
 import { AssetCreationWorkflow } from "@/components/cards-accounts-view";
 import { useFinancialProfile } from "@/components/financial-provider";
+import { ManageMonthlyBudgetDialog, type ManageBudgetOptions } from "@/components/manage-monthly-budget-dialog";
 import { MoneyInput } from "@/components/money-input";
 import { ConfirmationDialog, ModalDialog } from "@/components/modal-dialog";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
 import { AddTransactionButton, AllTransactionsDialog, TransactionDeleteDialog, TransactionForm } from "@/components/transactions-ui";
 import { useModalDialog } from "@/components/use-modal-dialog";
-import { budgetCategoriesForMonth, budgetSummary, categoryBudgetPosition, hasOverallBudget, monthlyBudgetPosition, overallBudgetForMonth, replaceBudgetSnapshot, replaceOverallBudgetSnapshot } from "@/lib/financial-budget";
+import { budgetCategoriesForMonth, budgetSummary, categoryBudgetPosition, dashboardBudgetHeroState, hasOverallBudget, monthlyBudgetPosition, overallBudgetForMonth } from "@/lib/financial-budget";
 import { calculateActualSummary, formatMoney } from "@/lib/financial-calculations";
 import { budgetPeriodForDate, budgetPeriodForKey, dateInBudgetPeriod, financialReferenceDate, financialReferenceMonth, financialReferencePeriod } from "@/lib/financial-date";
 import { profileSavingsGoalStatus } from "@/lib/financial-goal-status";
@@ -101,15 +102,16 @@ export function DashboardView() {
   const available = sum(Object.values(actual.accounts).filter((amount) => amount > 0)) + actual.cash;
   const owed = sum(Object.values(actual.cards));
   const budget = budgetSummary(profile, month, actual.expenses);
+  const budgetHero = dashboardBudgetHeroState(budget);
   const { saved: totalSaved, target: totalTarget } = savingsGoalTotals(profile);
   const goals = [...profile.savingsGoals].sort((a, b) => a.priority - b.priority);
   const recent = [...profile.transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
   const monthTransactions = profile.transactions.filter((item) => dateInBudgetPeriod(item.date, period)).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
   return <>{transactionsOpen && <AllTransactionsDialog close={() => setTransactionsOpen(false)} transactions={monthTransactions} profile={profile} />}
     {assetWorkflowOpen && <AssetCreationWorkflow close={() => setAssetWorkflowOpen(false)} />}
-    {budgetWorkflowOpen && <MonthlyBudgetWorkflow profile={profile} close={() => setBudgetWorkflowOpen(false)} />}
+    {budgetWorkflowOpen && <ManageMonthlyBudgetDialog profile={profile} close={() => setBudgetWorkflowOpen(false)} />}
     {goalWorkflowOpen && <SavingsGoalDialog profile={profile} close={() => setGoalWorkflowOpen(false)} />}
-    <section className="hero-balance"><div><p className="app-eyebrow">Money available</p><h2><AnimatedMoney value={available} currency={profile.currency} /></h2><p>Accounts plus cash you own. Credit debt stays separate.</p></div><div className="hero-balance-side"><span>{budget.kind === "none" ? "Monthly budget" : budget.remaining !== null && budget.remaining < 0 ? "Over budget" : "Budget remaining"}<strong className={budget.kind === "over" ? "negative" : budget.kind === "none" ? "neutral" : ""}>{budget.kind === "none" || budget.remaining === null ? "No budget" : formatMoney(Math.abs(budget.remaining), profile.currency)}</strong></span><Status value={budget.tone} label={budget.statusLabel} /></div></section>
+    <section className="hero-balance"><div><p className="app-eyebrow">Money available</p><h2><AnimatedMoney value={available} currency={profile.currency} /></h2><p>Accounts plus cash you own. Credit debt stays separate.</p></div><div className="hero-balance-side"><span className={budgetHero.statusLabel === null ? "is-no-budget" : undefined}>{budgetHero.label}<strong className={budget.kind === "over" ? "negative" : ""}>{budgetHero.valueLabel ?? formatMoney(budgetHero.amount ?? 0, profile.currency)}</strong></span>{budgetHero.statusLabel && <Status value={budget.tone} label={budgetHero.statusLabel} />}</div></section>
     <section className="metric-grid" aria-label="Budget-period summary">
       <Metric label="Income this period" value={formatMoney(actual.income, profile.currency)} detail={period.label} tone="green" icon="income" />
       <Metric label="Spent this period" value={formatMoney(actual.expenses, profile.currency)} detail={period.label} tone="coral" icon="expense" />
@@ -117,8 +119,8 @@ export function DashboardView() {
       <Metric label="Credit card balance" value={formatMoney(owed, profile.currency)} detail="Total currently owed" tone="blue" icon="wallet" />
     </section>
     <section className="dashboard-grid">
-      <div className="content-panel savings-overview"><div className="panel-heading"><div><p className="app-eyebrow">Savings</p><h2>Your goals</h2></div><Link href="/plan?tab=savings">View goals <AppIcon name="arrow" /></Link></div>{goals.length ? <><div className="savings-total"><strong>{formatMoney(totalSaved, profile.currency)}</strong><span>saved of {formatMoney(totalTarget, profile.currency)}</span></div><Progress value={totalTarget ? totalSaved / totalTarget * 100 : 0} label="Total savings progress" /><div className="dashboard-goal-list">{goals.map((goal) => { const percent = Math.round(goal.target ? goal.saved / goal.target * 100 : 0); return <div className="dashboard-goal-row" key={goal.id}><span><strong>{goal.name}</strong><small>{formatMoney(goal.saved, profile.currency)} of {formatMoney(goal.target, profile.currency)}</small></span><b>{percent}%</b></div>; })}</div></> : <EmptyPanel title="No savings goals yet" text="Start with one goal that matters to you." action="Add savings goal" onAction={() => setGoalWorkflowOpen(true)} />}</div>
-      <div className="content-panel"><div className="panel-heading"><div><p className="app-eyebrow">Recent activity</p><h2>Latest transactions</h2></div><button className="text-button" type="button" onClick={() => setTransactionsOpen(true)}>View all <AppIcon name="arrow" /></button></div>{recent.length ? <div className="activity-list">{recent.map((item) => <TransactionRow key={item.id} item={item} profile={profile} />)}</div> : <EmptyPanel title="No transactions yet" text="Add your first income or expense to start your monthly picture." />}</div>
+      <div className="content-panel savings-overview"><div className="panel-heading"><div><p className="app-eyebrow">Savings</p><h2>Your goals</h2></div><Link className="panel-text-action" href="/plan?tab=savings">View goals <AppIcon name="arrow" /></Link></div>{goals.length ? <><div className="savings-total"><strong>{formatMoney(totalSaved, profile.currency)}</strong><span>saved of {formatMoney(totalTarget, profile.currency)}</span></div><Progress value={totalTarget ? totalSaved / totalTarget * 100 : 0} label="Total savings progress" /><div className="dashboard-goal-list">{goals.map((goal) => { const percent = Math.round(goal.target ? goal.saved / goal.target * 100 : 0); return <div className="dashboard-goal-row" key={goal.id}><span><strong>{goal.name}</strong><small>{formatMoney(goal.saved, profile.currency)} of {formatMoney(goal.target, profile.currency)}</small></span><b>{percent}%</b></div>; })}</div></> : <EmptyPanel title="No savings goals yet" text="Start with one goal that matters to you." action="Add savings goal" onAction={() => setGoalWorkflowOpen(true)} />}</div>
+      <div className="content-panel"><div className="panel-heading"><div><p className="app-eyebrow">Recent activity</p><h2>Latest transactions</h2></div><button className="text-button panel-text-action" type="button" onClick={() => setTransactionsOpen(true)}>View all <AppIcon name="arrow" /></button></div>{recent.length ? <div className="activity-list">{recent.map((item) => <TransactionRow key={item.id} item={item} profile={profile} />)}</div> : <EmptyPanel title="No transactions yet" text="Add your first income or expense to start your monthly picture." />}</div>
     </section>
     <section className="quick-actions"><div><p className="app-eyebrow">Quick actions</p><h2>What would you like to do?</h2></div><div className="quick-action-list"><AddTransactionButton /><button className="quick-action" type="button" onClick={() => setAssetWorkflowOpen(true)}><AppIcon name="wallet" />Add account/card</button><button className="quick-action" type="button" onClick={() => setBudgetWorkflowOpen(true)}><AppIcon name="plan" />{budget.kind === "none" ? "Add budget" : "Edit budget"}</button><button className="quick-action" type="button" onClick={() => setGoalWorkflowOpen(true)}><AppIcon name="plus" />Add savings goal</button></div></section>
   </>;
@@ -196,19 +198,10 @@ function AddItemCard({ label, href, onClick }: { label: string; href?: string; o
 
 type PlannedCategory = CategoryBudget & { spent: number };
 
-function MonthlyBudgetWorkflow({ profile, close }: { profile: FinancialProfile; close: () => void }) {
-  const { save } = useFinancialProfile();
-  const activeMonth = financialReferenceMonth(profile);
-  const budget = overallBudgetForMonth(profile, activeMonth) ?? 0;
-  const apply = (nextBudget: number) => save(replaceOverallBudgetSnapshot(profile, activeMonth, nextBudget));
-  return <MonthlyBudgetDialog budget={budget} profile={profile} save={apply} close={close} />;
-}
-
 export function PlanView({ initialTab = "budgets", initialAction }: { initialTab?: PlanTab; initialAction?: PlanAction }) {
   const state = useProfileState();
   const [tab, setTab] = useState<PlanTab>(initialTab);
-  const [editingCategory, setEditingCategory] = useState<CategoryBudget>();
-  const [editingMonth, setEditingMonth] = useState(initialAction === "edit-budget");
+  const [manageBudget, setManageBudget] = useState<ManageBudgetOptions | undefined>(initialAction === "edit-budget" ? {} : undefined);
   const [addingGoal, setAddingGoal] = useState(initialAction === "add-goal");
   const [allCategoriesOpen, setAllCategoriesOpen] = useState(false);
   if (state.content || !state.profile) return state.content;
@@ -222,13 +215,10 @@ export function PlanView({ initialTab = "budgets", initialAction }: { initialTab
   const hasMonthlyBudget = hasOverallBudget(profile, activeMonth);
   const budgetMap = new Map(categoryBudgets.map((category) => [category.name, category]));
   const categories = [...new Set([...categoryBudgets.map((category) => category.name), ...Object.keys(categorySpending)])].map((name) => ({ id: budgetMap.get(name)?.id ?? `unbudgeted-${name}`, name, limit: budgetMap.get(name)?.limit ?? 0, month: activeMonth, spent: categorySpending[name] ?? 0 }));
-  const applyBudgets = (next: CategoryBudget[]) => state.save(replaceBudgetSnapshot(profile, activeMonth, next));
-  const applyMonthlyBudget = (budget: number) => state.save(replaceOverallBudgetSnapshot(profile, activeMonth, budget));
   return <><div className="segmented-control plan-tabs" role="tablist" aria-label="Plan section"><button role="tab" aria-selected={tab === "budgets"} onClick={() => setTab("budgets")}>Monthly budgets</button><button role="tab" aria-selected={tab === "savings"} onClick={() => setTab("savings")}>Savings goals</button></div>
-    {tab === "budgets" ? <MonthlyBudgetPlanner month={activeMonth} profile={profile} categories={categories} budget={monthlyBudget} spent={spent} hasBudget={hasMonthlyBudget} editMonth={() => setEditingMonth(true)} editCategory={setEditingCategory} viewAll={() => setAllCategoriesOpen(true)} /> : <SavingsGoals profile={profile} goals={profile.savingsGoals} add={() => setAddingGoal(true)} />}
-    {editingMonth && <MonthlyBudgetDialog budget={monthlyBudget} profile={profile} save={applyMonthlyBudget} close={() => setEditingMonth(false)} />}
-    {editingCategory && <CategoryBudgetDialog category={editingCategory} categories={categoryBudgets} monthlyBudget={monthlyBudget} spent={categorySpending[editingCategory.name] ?? 0} profile={profile} save={applyBudgets} close={() => setEditingCategory(undefined)} />}
-    {allCategoriesOpen && <AllPlanCategoriesDialog categories={categories} profile={profile} edit={(category) => { setAllCategoriesOpen(false); setEditingCategory(category); }} close={() => setAllCategoriesOpen(false)} />}
+    {tab === "budgets" ? <MonthlyBudgetPlanner month={activeMonth} profile={profile} categories={categories} allocatedCount={categoryBudgets.length} budget={monthlyBudget} spent={spent} hasBudget={hasMonthlyBudget} manage={(options) => setManageBudget(options ?? {})} viewAll={() => setAllCategoriesOpen(true)} /> : <SavingsGoals profile={profile} goals={profile.savingsGoals} add={() => setAddingGoal(true)} />}
+    {manageBudget !== undefined && <ManageMonthlyBudgetDialog profile={profile} options={manageBudget} close={() => setManageBudget(undefined)} />}
+    {allCategoriesOpen && categoryBudgets.length > 0 && <AllPlanCategoriesDialog categories={categories} profile={profile} edit={(category) => { setAllCategoriesOpen(false); setManageBudget({ categoryId: category.id, categoryName: category.name, focusCategories: true }); }} close={() => setAllCategoriesOpen(false)} />}
     {addingGoal && <SavingsGoalDialog profile={profile} close={() => setAddingGoal(false)} />}
   </>;
 }
@@ -237,8 +227,8 @@ function orderedPlanCategories(categories: PlannedCategory[]) {
   return [...categories].sort((a, b) => Number(b.spent > b.limit) - Number(a.spent > a.limit) || b.spent - a.spent || a.name.localeCompare(b.name));
 }
 
-function MonthlyBudgetPlanner({ month, profile, categories, budget, spent, hasBudget, editMonth, editCategory, viewAll }: { month: string; profile: FinancialProfile; categories: PlannedCategory[]; budget: number; spent: number; hasBudget: boolean; editMonth: () => void; editCategory: (category: CategoryBudget) => void; viewAll: () => void }) {
-  if (!hasBudget) return <EmptyPanel title="No monthly budget yet" text="Create an overall spending limit for this budget period. Category allocations can stay empty." action="Create budget" onAction={editMonth} />;
+function MonthlyBudgetPlanner({ month, profile, categories, allocatedCount, budget, spent, hasBudget, manage, viewAll }: { month: string; profile: FinancialProfile; categories: PlannedCategory[]; allocatedCount: number; budget: number; spent: number; hasBudget: boolean; manage: (options?: ManageBudgetOptions) => void; viewAll: () => void }) {
+  if (!hasBudget) return <EmptyPanel title="No monthly budget yet" text="Create an overall spending limit for this budget period. Category allocations can stay empty." action="Create budget" onAction={() => manage()} />;
   const summary = budgetSummary(profile, month, spent);
   const remaining = summary.remaining ?? 0;
   const percent = summary.percent ?? 0;
@@ -248,38 +238,19 @@ function MonthlyBudgetPlanner({ month, profile, categories, budget, spent, hasBu
   const status = summary.tone === "neutral" ? "good" : summary.tone;
   return <div className="plan-budget-workspace">
     <section className="content-panel action-card plan-budget-overview">
-      <div className="plan-budget-overview-header"><div><p className="app-eyebrow">{budgetPeriodForKey(profile.budgetStartDay, month).label}</p><h2>Monthly spending plan</h2></div><button className="text-button" type="button" onClick={editMonth}>Edit monthly budget <AppIcon name="arrow" /></button></div>
+      <div className="plan-budget-overview-header"><div><p className="app-eyebrow">{budgetPeriodForKey(profile.budgetStartDay, month).label}</p><h2>Monthly spending plan</h2></div><button className="text-button" type="button" onClick={() => manage()}>Edit monthly budget <AppIcon name="arrow" /></button></div>
       <div className="plan-budget-primary"><span>Remaining</span><strong className={remaining < 0 ? "negative" : undefined}>{formatMoney(Math.abs(remaining), profile.currency)} <small>{remaining < 0 ? "over" : "remaining"}</small></strong><p>of {formatMoney(budget, profile.currency)} monthly budget</p></div>
       <Progress value={percent} tone={status} label={`${budgetPeriodForKey(profile.budgetStartDay, month).label} budget used`} />
       <div className="plan-budget-overview-footer"><strong>{Math.round(percent)}% used</strong><div className="plan-budget-supporting"><span>Spent<strong>{formatMoney(spent, profile.currency)}</strong></span><span>Allocated<strong>{formatMoney(summary.allocated, profile.currency)}</strong></span><span>Unallocated<strong className={(summary.unallocated ?? 0) < 0 ? "negative" : undefined}>{formatMoney(Math.abs(summary.unallocated ?? 0), profile.currency)}{(summary.unallocated ?? 0) < 0 ? " over" : ""}</strong></span><span>Status<Status value={status} label={summary.statusLabel} /></span></div></div>
     </section>
-    {attention.length > 0 && <section className="plan-budget-section"><div className="plan-budget-section-heading"><div><p className="app-eyebrow">Needs attention</p><h2>Categories over budget</h2></div></div><div className="plan-category-list is-attention">{attention.map((category) => <PlanCategoryRow key={category.id} category={category} profile={profile} edit={() => editCategory(category)} />)}</div></section>}
-    <section className="plan-budget-section"><div className="plan-budget-section-heading"><div><p className="app-eyebrow">Category budgets</p><h2>Your spending room</h2></div><button className="text-button" type="button" onClick={viewAll}>View all category budgets <AppIcon name="arrow" /></button></div>{inlineCategories.length ? <div className="plan-category-list">{inlineCategories.map((category) => <PlanCategoryRow key={category.id} category={category} profile={profile} edit={() => editCategory(category)} />)}</div> : <p className="section-note">No category allocations yet. Your overall budget is still active.</p>}</section>
+    {attention.length > 0 && <section className="plan-budget-section"><div className="plan-budget-section-heading"><div><p className="app-eyebrow">Needs attention</p><h2>Categories over budget</h2></div></div><div className="plan-category-list is-attention">{attention.map((category) => <PlanCategoryRow key={category.id} category={category} profile={profile} edit={() => manage({ categoryId: category.id, categoryName: category.name, focusCategories: true })} />)}</div></section>}
+    <section className="plan-budget-section"><div className="plan-budget-section-heading"><div><p className="app-eyebrow">Category budgets</p><h2>Your spending room</h2></div>{allocatedCount > 0 ? <button className="text-button" type="button" onClick={viewAll}>View all category budgets <AppIcon name="arrow" /></button> : <button className="text-button" type="button" onClick={() => manage({ focusCategories: true })}>Add category budgets <AppIcon name="arrow" /></button>}</div>{inlineCategories.length ? <div className="plan-category-list">{inlineCategories.map((category) => <PlanCategoryRow key={category.id} category={category} profile={profile} edit={() => manage({ categoryId: category.id, categoryName: category.name, focusCategories: true })} />)}</div> : <p className="section-note">No category allocations yet. Your overall budget is still active.</p>}</section>
   </div>;
 }
 
 function PlanCategoryRow({ category, profile, edit }: { category: PlannedCategory; profile: FinancialProfile; edit?: () => void }) {
   const position = categoryBudgetPosition(category.limit, category.spent);
   return <article className={position.kind === "over" || position.kind === "unbudgeted" ? "is-over-budget" : undefined}><div className="plan-category-heading"><strong>{category.name}</strong><div><Status value={position.tone} label={position.statusLabel} />{edit && <button className="text-button" type="button" onClick={edit}>Edit</button>}</div></div><div className="plan-category-values"><span>Budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(category.spent, profile.currency)}</strong></span><span>{position.differenceLabel}<strong className={position.kind === "over" || position.kind === "unbudgeted" ? "negative" : position.kind === "no-budget" ? "neutral" : "positive"}>{formatMoney(position.difference, profile.currency)}</strong></span><b>{position.percent === null ? position.statusLabel : `${Math.round(position.percent)}%`}</b></div>{position.percent !== null && <Progress value={position.percent} tone={position.tone === "neutral" ? "good" : position.tone} label={`${category.name} budget used`} />}</article>;
-}
-
-function MonthlyBudgetDialog({ budget: currentBudget, profile, save, close }: { budget: number; profile: FinancialProfile; save: (budget: number) => Promise<boolean>; close: () => void }) {
-  const [budget, setBudget] = useState(currentBudget);
-  const [error, setError] = useState("");
-  const submit = async () => { if (budget <= 0) return setError("Enter a monthly budget above zero."); if (await save(budget)) close(); else setError("We couldn’t save this budget. Check your connection and try again."); };
-  return <ModalDialog title={currentBudget ? "Edit monthly budget" : "Create monthly budget"} eyebrow="Monthly budget" close={close} closeLabel="Close monthly budget editor" className="plan-editor-dialog">{currentBudget > 0 && <div className="plan-editor-context"><span>Current budget<strong>{formatMoney(currentBudget, profile.currency)}</strong></span></div>}<label className="form-field">{currentBudget ? "New budget amount" : "Monthly budget amount"}<MoneyInput value={budget} onValueChange={(value) => { setBudget(value); setError(""); }} aria-invalid={!!error} /></label><p className="form-help">Category allocations stay independent and will not change.</p>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>{currentBudget ? "Save changes" : "Create budget"}</button></div></ModalDialog>;
-}
-
-function CategoryBudgetDialog({ category, categories, monthlyBudget, spent, profile, save, close }: { category: CategoryBudget; categories: CategoryBudget[]; monthlyBudget: number; spent: number; profile: FinancialProfile; save: (categories: CategoryBudget[]) => Promise<boolean>; close: () => void }) {
-  const [budget, setBudget] = useState(category.limit);
-  const [error, setError] = useState("");
-  const exists = categories.some((item) => item.id === category.id);
-  const currentTotal = sum(categories.map((item) => item.limit));
-  const nextTotal = currentTotal - (exists ? category.limit : 0) + budget;
-  const exceedsBy = Math.max(0, nextTotal - monthlyBudget);
-  const remaining = category.limit - spent;
-  const submit = async () => { if (budget <= 0) return setError("Enter a category budget above zero."); const next = exists ? categories.map((item) => item.id === category.id ? { ...item, limit: budget } : item) : [...categories, { ...category, limit: budget }]; if (await save(next)) close(); };
-  return <ModalDialog title={`Edit ${category.name}`} eyebrow="Category budget" close={close} closeLabel="Close category budget editor" className="plan-editor-dialog"><div className="plan-editor-context"><span>Category<strong>{category.name}</strong></span><span>Current budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Current spent<strong>{formatMoney(spent, profile.currency)}</strong></span><span>{remaining < 0 ? "Currently over" : "Currently remaining"}<strong className={remaining < 0 ? "negative" : "positive"}>{formatMoney(Math.abs(remaining), profile.currency)}</strong></span></div><label className="form-field">New budget amount<MoneyInput value={budget} onValueChange={(value) => { setBudget(value); setError(""); }} aria-invalid={!!error} /></label>{exceedsBy > 0 && <p className="form-message is-warning" role="status">Category allocations exceed your overall monthly budget by {formatMoney(exceedsBy, profile.currency)}. Your overall budget will stay {formatMoney(monthlyBudget, profile.currency)}.</p>}{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>Save changes</button></div></ModalDialog>;
 }
 
 function AllPlanCategoriesDialog({ categories, profile, edit, close }: { categories: PlannedCategory[]; profile: FinancialProfile; edit?: (category: CategoryBudget) => void; close: () => void }) {

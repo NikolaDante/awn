@@ -54,6 +54,16 @@ export function replaceBudgetSnapshot(profile: FinancialProfile, month: string, 
   return { ...normalized, categoryBudgets: [...retained, ...snapshot] };
 }
 
+export function budgetDraftAllocation(overall: number, categories: CategoryBudget[]) {
+  const allocated = categories.reduce((total, category) => total + category.limit, 0);
+  return { overall, allocated, unallocated: overall - allocated };
+}
+
+export function replaceManagedBudgetSnapshot(profile: FinancialProfile, month: string, overall: number, categories: CategoryBudget[]) {
+  const normalized = normalizeBudgetSnapshots(profile, month);
+  return replaceBudgetSnapshot(replaceOverallBudgetSnapshot(normalized, month, overall), month, categories);
+}
+
 export type BudgetSummary = {
   budget: number | null;
   allocated: number;
@@ -76,6 +86,16 @@ export function budgetSummary(profile: FinancialProfile, month: string, spent: n
   if (remaining === 0) return { budget, allocated, unallocated: budget - allocated, spent, remaining, percent, kind: "exact", tone: "watch", statusLabel: "On budget" };
   if (percent >= 85) return { budget, allocated, unallocated: budget - allocated, spent, remaining, percent, kind: "near", tone: "watch", statusLabel: "Near limit" };
   return { budget, allocated, unallocated: budget - allocated, spent, remaining, percent, kind: "under", tone: "good", statusLabel: "Under budget" };
+}
+
+export function dashboardBudgetHeroState(summary: BudgetSummary) {
+  if (summary.kind === "none" || summary.remaining === null) return { label: "Monthly budget", amount: null, valueLabel: "No budget", statusLabel: null };
+  return {
+    label: summary.remaining < 0 ? "Over budget" : "Budget remaining",
+    amount: Math.abs(summary.remaining),
+    valueLabel: null,
+    statusLabel: summary.statusLabel,
+  };
 }
 
 export type CategoryBudgetPosition = {

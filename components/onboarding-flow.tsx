@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { CategoryBudgetForm } from "@/components/category-budget-form";
 import { FinancialItemForm, type FinancialItem, type FinancialItemKind } from "@/components/financial-item-form";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { FormField } from "@/components/form-field";
@@ -15,9 +16,8 @@ import { financialReferenceMonth } from "@/lib/financial-date";
 import { countryCurrencies, suggestedCurrency } from "@/lib/financial-institutions";
 import { hasLinkedAccountActivity, hasLinkedCardActivity, removalGuardMessage } from "@/lib/financial-reference-guards";
 import { budgetAllocation, formatBudgetCycle, formatTargetMonth, normalizeBudgetStartDayInput, onboardingSteps, parseBudgetStartDayInput, removeOnboardingItem, requestedOnboardingStep, upsertOnboardingItem } from "@/lib/onboarding";
-import { currencies, newLocalId, type Account, type CategoryBudget, type CreditCard, type Currency, type DebitCard, type FinancialProfile, type SavingsGoal } from "@/lib/financial-types";
+import { currencies, type Account, type CategoryBudget, type CreditCard, type Currency, type DebitCard, type FinancialProfile, type SavingsGoal } from "@/lib/financial-types";
 
-const suggestedCategories = ["Housing", "Utilities", "Groceries", "Transport", "Dining", "Shopping", "Health", "Entertainment", "Family", "Other"];
 type Errors = Record<string, string>;
 type ItemEditor = { kind: FinancialItemKind; item?: FinancialItem };
 type PendingRemoval = { title: string; description: string; confirm: () => void };
@@ -172,22 +172,7 @@ function BudgetStep({ draft, change, error, editor, setEditor }: { draft: Financ
   const updateCategories = (categories: CategoryBudget[]) => change({ categoryBudgets: replaceBudgetSnapshot(draft, month, categories).categoryBudgets });
   const updateOverallBudget = (value: number) => { const next = replaceOverallBudgetSnapshot(draft, month, value); change({ monthlyBudget: next.monthlyBudget, monthlyBudgets: next.monthlyBudgets }); };
   const persist = (category: CategoryBudget) => { updateCategories(upsertOnboardingItem(allocation.categories, category)); setEditor(undefined); };
-  return <div className="step-content"><FormField label="What would you like to spend this month?" error={error} hint="This is your overall monthly spending budget."><MoneyInput value={allocation.total} onValueChange={updateOverallBudget} placeholder="0.00" /></FormField>{allocation.total > 0 && <><div className="allocation-summary"><span>Total monthly budget<strong>{formatMoney(allocation.total, draft.currency)}</strong></span><span>Allocated<strong>{formatMoney(allocation.allocated, draft.currency)}</strong></span><span>Unallocated<strong className={allocation.unallocated < 0 ? "negative" : ""}>{formatMoney(allocation.unallocated, draft.currency)}</strong></span></div>{allocation.unallocated < 0 && <p className="form-message is-warning" role="status">Category allocations exceed your overall budget by {formatMoney(Math.abs(allocation.unallocated), draft.currency)}.</p>}{editor !== undefined ? <CategoryBudgetForm existing={editor ?? undefined} categories={allocation.categories} onCancel={() => setEditor(undefined)} onSave={persist} /> : <><div className="editor-heading"><h2>Category budgets <small>Optional</small></h2><button type="button" className="text-button" onClick={() => setEditor(null)}>+ Add category</button></div><SummaryGroup empty="No category budgets added. Your overall budget is still saved.">{allocation.categories.map((category) => <SummaryRow key={category.id} title={category.name} detail={formatMoney(category.limit, draft.currency)} edit={() => setEditor(category)} remove={() => updateCategories(removeOnboardingItem(allocation.categories, category.id))} />)}</SummaryGroup></>}</>}</div>;
-}
-
-function CategoryBudgetForm({ existing, categories, onCancel, onSave }: { existing?: CategoryBudget; categories: CategoryBudget[]; onCancel: () => void; onSave: (category: CategoryBudget) => void }) {
-  const [name, setName] = useState(existing?.name ?? suggestedCategories.find((suggestion) => !categories.some((category) => category.name === suggestion)) ?? "Other");
-  const [limit, setLimit] = useState(existing?.limit ?? 0);
-  const [errors, setErrors] = useState<Errors>({});
-  const submit = () => {
-    const next: Errors = {};
-    if (!name.trim()) next.name = "Please choose a category.";
-    if (categories.some((category) => category.id !== existing?.id && category.name.toLowerCase() === name.trim().toLowerCase())) next.name = "That category already has a budget.";
-    if (limit <= 0) next.limit = "Monthly limit must be above zero.";
-    setErrors(next);
-    if (!Object.keys(next).length) onSave({ id: existing?.id ?? newLocalId(), name: name.trim(), limit, month: existing?.month });
-  };
-  return <div className="inline-form"><div className="field-row"><FormField label="Category" error={errors.name}><select value={name} onChange={(event) => setName(event.target.value)}>{suggestedCategories.map((category) => <option key={category}>{category}</option>)}</select></FormField><FormField label="Monthly limit" error={errors.limit}><MoneyInput value={limit} onValueChange={setLimit} placeholder="0.00" /></FormField></div><div className="confirm-dialog-actions"><button type="button" className="app-button app-button-secondary" onClick={onCancel}>Cancel</button><button type="button" className="app-button" onClick={submit}>{existing ? "Save changes" : "Add category"}</button></div></div>;
+  return <div className="step-content"><FormField label="What would you like to spend this month?" error={error} hint="This is your overall monthly spending budget."><MoneyInput value={allocation.total} onValueChange={updateOverallBudget} placeholder="0.00" /></FormField>{allocation.total > 0 && <><div className="allocation-summary"><span>Total monthly budget<strong>{formatMoney(allocation.total, draft.currency)}</strong></span><span>Allocated<strong>{formatMoney(allocation.allocated, draft.currency)}</strong></span><span>Unallocated<strong className={allocation.unallocated < 0 ? "negative" : ""}>{formatMoney(allocation.unallocated, draft.currency)}</strong></span></div>{allocation.unallocated < 0 && <p className="form-message is-warning" role="status">Category allocations exceed your overall budget by {formatMoney(Math.abs(allocation.unallocated), draft.currency)}.</p>}{editor !== undefined ? <CategoryBudgetForm existing={editor ?? undefined} categories={allocation.categories} profile={draft} onCancel={() => setEditor(undefined)} onSave={persist} /> : <><div className="editor-heading"><h2>Category budgets <small>Optional</small></h2><button type="button" className="text-button" onClick={() => setEditor(null)}>+ Add category</button></div><SummaryGroup empty="No category budgets added. Your overall budget is still saved.">{allocation.categories.map((category) => <SummaryRow key={category.id} title={category.name} detail={formatMoney(category.limit, draft.currency)} edit={() => setEditor(category)} remove={() => updateCategories(removeOnboardingItem(allocation.categories, category.id))} />)}</SummaryGroup></>}</>}</div>;
 }
 
 function SavingsStep({ draft, change, editor, setEditor, requestRemoval }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; editor: SavingsGoal | null | undefined; setEditor: (editor: SavingsGoal | null | undefined) => void; requestRemoval: RequestRemoval }) {

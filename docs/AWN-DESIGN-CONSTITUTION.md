@@ -557,6 +557,16 @@ Users can use:
 - AWN default categories
 - custom categories
 
+The overall monthly budget remains the canonical total spending limit. Category
+allocations are optional amounts inside that limit and are managed through the
+shared Monthly Budget workflow; they do not need to add up to the overall
+budget and must never rescale automatically.
+
+AWN's default category catalog is a grouped suggestion system, not a data
+restriction. Custom categories remain supported, and historical or legacy
+category strings must continue to display exactly as recorded unless the user
+edits them.
+
 At month end, future functionality should allow the user to decide whether unused money:
 
 - rolls into the next budget
