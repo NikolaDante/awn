@@ -20,5 +20,8 @@ export async function GET(request: NextRequest) {
     signIn.searchParams.set("next", next);
     return NextResponse.redirect(signIn);
   }
-  return NextResponse.redirect(new URL(next, request.url));
+  const destination = new URL(next, request.url);
+  const response = NextResponse.redirect(destination);
+  if (destination.pathname === "/auth/reset") response.cookies.set("awn-recovery", "verified", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 600, path: "/auth/reset" });
+  return response;
 }

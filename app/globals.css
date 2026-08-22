@@ -969,6 +969,9 @@
 
 .savings-goal-dialog {
   width:min(100%,680px);
+  max-height:min(92dvh,840px);
+  overflow-x:hidden;
+  overflow-y:auto;
 }
 
 .savings-goal-dialog > .repeat-card-heading {

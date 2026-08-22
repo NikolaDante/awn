@@ -1,5 +1,7 @@
 import { decideInitialCloudState, LOCAL_CLOUD_MIGRATION_IDENTIFIER, parseCloudStateRow, type CloudFinancialState } from "@/lib/cloud-financial-core";
 import { normalizeLedgerProfile } from "@/lib/financial-ledger";
+import { normalizeBudgetSnapshots } from "@/lib/financial-budget";
+import { financialReferenceMonth } from "@/lib/financial-date";
 import { backupFinancialProfileForCloudMigration, loadFinancialProfile } from "@/lib/financial-storage";
 import { isFinancialProfile } from "@/lib/financial-storage-core";
 import type { FinancialProfile } from "@/lib/financial-types";
@@ -27,7 +29,8 @@ function repositoryError(error: { code?: string; message?: string } | null, fall
 }
 
 function normalizeCloudProfile(profile: FinancialProfile) {
-  return normalizeLedgerProfile({ ...profile, country: profile.country ?? "United Arab Emirates", budgetStartDay: profile.budgetStartDay ?? 1, cashBalance: profile.cashBalance ?? 0, debitCards: profile.debitCards ?? [] });
+  const normalized = normalizeLedgerProfile({ ...profile, country: profile.country ?? "United Arab Emirates", budgetStartDay: profile.budgetStartDay ?? 1, cashBalance: profile.cashBalance ?? 0, debitCards: profile.debitCards ?? [], monthlyBudgets: profile.monthlyBudgets ?? [] });
+  return normalizeBudgetSnapshots(normalized, financialReferenceMonth(normalized));
 }
 
 async function resolveState() {

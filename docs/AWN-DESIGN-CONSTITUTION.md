@@ -474,13 +474,15 @@ Use exactly:
 
 Cards & Accounts
 
-Inside the page use three clearly separated tabs:
+Inside the page use three clearly separated expandable sections:
 
 - Accounts
 - Debit Cards
 - Credit Cards
 
-Never mix all three into one generic list.
+This expandable-section structure is the approved frozen design. Each section
+keeps its own summary, content, and actions; never mix all three into one
+generic list or replace the sections with tabs without explicit approval.
 
 ### Accounts
 

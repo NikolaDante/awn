@@ -10,6 +10,7 @@ export type Account = { id: string; name: string; type: "current" | "savings" | 
 export type DebitCard = { id: string; name: string; country: string; currency: Currency; lastFour?: string; linkedAccountId?: string; purpose?: string };
 export type CreditCard = { id: string; name: string; limit: Amount; owed: Amount; dueDay: number; country?: string; currency?: Currency; lastFour?: string; purpose?: string };
 export type CategoryBudget = { id: string; name: string; limit: Amount; month?: string };
+export type MonthlyBudgetSnapshot = { month: string; limit: Amount };
 export type SavingsGoal = { id: string; name: string; target: Amount; saved: Amount; contribution: Amount; startDate?: string; targetDate?: string; priority: number };
 export type TransactionBase = { id: string; amount: Amount; date: string; note?: string; createdAt: string; updatedAt: string; createdByUserId?: string; updatedByUserId?: string };
 export type AssetSourceKind = "cash" | "account";
@@ -29,6 +30,8 @@ export type FinancialProfile = {
   budgetStartDay?: number;
   /** Overall monthly spending ceiling. Category budgets are optional allocations within it. */
   monthlyBudget?: Amount;
+  /** Period-specific overall spending ceilings. `monthlyBudget` remains the recurring legacy fallback. */
+  monthlyBudgets?: MonthlyBudgetSnapshot[];
   incomeSources: IncomeSource[];
   /** Opening cash position. Current cash is derived by the ledger. */
   cashBalance?: Amount;
@@ -47,5 +50,5 @@ export const newLocalId = () => typeof crypto !== "undefined" && "randomUUID" in
 
 export function createFinancialProfile(): FinancialProfile {
   const now = new Date().toISOString();
-  return { version: FINANCIAL_PROFILE_VERSION, country: "United Arab Emirates", currency: "AED", budgetStartDay: 1, cashBalance: 0, incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], savingsGoals: [], onboarding: { currentStep: 0, completed: false }, createdAt: now, updatedAt: now, transactions: [] };
+  return { version: FINANCIAL_PROFILE_VERSION, country: "United Arab Emirates", currency: "AED", budgetStartDay: 1, cashBalance: 0, incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], monthlyBudgets: [], savingsGoals: [], onboarding: { currentStep: 0, completed: false }, createdAt: now, updatedAt: now, transactions: [] };
 }

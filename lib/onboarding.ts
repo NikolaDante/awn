@@ -1,4 +1,4 @@
-import { budgetCategoriesForMonth } from "./financial-budget.ts";
+import { budgetCategoriesForMonth, overallBudgetForMonth } from "./financial-budget.ts";
 import { financialReferenceMonth } from "./financial-date.ts";
 import type { CategoryBudget, FinancialProfile, SavingsGoal } from "./financial-types.ts";
 
@@ -20,9 +20,7 @@ export function authenticatedFinancialRoute(profile: FinancialProfile | null, pa
 }
 
 export function effectiveMonthlyBudget(profile: FinancialProfile, month = financialReferenceMonth(profile)) {
-  if (profile.monthlyBudget && profile.monthlyBudget > 0) return profile.monthlyBudget;
-  const allocated = budgetCategoriesForMonth(profile, month).reduce((total, category) => total + category.limit, 0);
-  return allocated || undefined;
+  return overallBudgetForMonth(profile, month);
 }
 
 export function budgetAllocation(profile: FinancialProfile, month = financialReferenceMonth(profile)) {

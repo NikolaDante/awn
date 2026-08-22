@@ -19,6 +19,7 @@ function migrationProfile(): FinancialProfile {
     currency: "AED",
     budgetStartDay: 25,
     monthlyBudget: 300000,
+    monthlyBudgets: [{ month: "2026-07", limit: 275000 }, { month: "2026-08", limit: 300000 }],
     cashBalance: 20000,
     incomeSources: [{ id: "salary", name: "Salary", amount: 1000000, day: 25 }],
     accounts: [
@@ -53,6 +54,7 @@ test("cloud state maps the complete Phase 2 profile without changing financial m
   assert.equal(parsed.profile?.debitCards?.[0].linkedAccountId, "account-main");
   assert.equal(parsed.profile?.transactions[2].type, "transfer");
   assert.deepEqual(parsed.profile?.categoryBudgets.map((item) => item.month), ["2026-07", "2026-08"]);
+  assert.deepEqual(parsed.profile?.monthlyBudgets, profile.monthlyBudgets);
   assert.equal(parsed.profile?.savingsGoals[0].targetDate, "2027-12-01");
   assert.deepEqual(calculateActualSummary(parsed.profile!, "2026-08"), calculateActualSummary(profile, "2026-08"));
 });

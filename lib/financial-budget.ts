@@ -1,4 +1,5 @@
 import type { CategoryBudget, FinancialProfile } from "@/lib/financial-types";
+import { budgetPeriodForDate } from "./financial-date.ts";
 
 const monthPattern = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -16,12 +17,34 @@ export function hasBudgetSnapshot(profile: FinancialProfile, month: string) {
   return profile.categoryBudgets.some((category) => category.month === month) || profile.categoryBudgets.some((category) => category.month === undefined);
 }
 
+export function overallBudgetForMonth(profile: FinancialProfile, month: string) {
+  const snapshot = profile.monthlyBudgets?.find((budget) => budget.month === month);
+  if (snapshot?.limit && snapshot.limit > 0) return snapshot.limit;
+  return profile.monthlyBudget && profile.monthlyBudget > 0 ? profile.monthlyBudget : undefined;
+}
+
+export function hasOverallBudget(profile: FinancialProfile, month: string) {
+  return overallBudgetForMonth(profile, month) !== undefined;
+}
+
+export function replaceOverallBudgetSnapshot(profile: FinancialProfile, month: string, limit: number): FinancialProfile {
+  const retained = (profile.monthlyBudgets ?? []).filter((budget) => budget.month !== month);
+  const monthlyBudgets = limit > 0 ? [...retained, { month, limit }] : retained;
+  return { ...profile, monthlyBudget: limit > 0 ? limit : undefined, monthlyBudgets };
+}
+
 export function normalizeBudgetSnapshots(profile: FinancialProfile, activeMonth: string): FinancialProfile {
   const unscoped = profile.categoryBudgets.filter((category) => category.month === undefined);
-  if (!unscoped.length) return profile;
   const activeNames = new Set(profile.categoryBudgets.filter((category) => category.month === activeMonth).map((category) => category.name.toLowerCase()));
   const migrated = unscoped.filter((category) => !activeNames.has(category.name.toLowerCase())).map((category) => ({ ...category, month: activeMonth }));
-  return { ...profile, categoryBudgets: [...profile.categoryBudgets.filter((category) => category.month !== undefined), ...migrated] };
+  const categoryBudgets = unscoped.length ? [...profile.categoryBudgets.filter((category) => category.month !== undefined), ...migrated] : profile.categoryBudgets;
+  const knownMonths = new Set([activeMonth, ...categoryBudgets.flatMap((category) => category.month ? [category.month] : []), ...profile.transactions.map((transaction) => budgetPeriodForDate(profile.budgetStartDay, transaction.date).key)]);
+  const monthlyBudgets = [...(profile.monthlyBudgets ?? [])];
+  if (profile.monthlyBudget && profile.monthlyBudget > 0) {
+    for (const month of knownMonths) if (!monthlyBudgets.some((budget) => budget.month === month)) monthlyBudgets.push({ month, limit: profile.monthlyBudget });
+  }
+  if (categoryBudgets === profile.categoryBudgets && monthlyBudgets.length === (profile.monthlyBudgets ?? []).length) return profile;
+  return { ...profile, categoryBudgets, monthlyBudgets };
 }
 
 export function replaceBudgetSnapshot(profile: FinancialProfile, month: string, categories: CategoryBudget[]): FinancialProfile {
@@ -29,6 +52,30 @@ export function replaceBudgetSnapshot(profile: FinancialProfile, month: string, 
   const retained = normalized.categoryBudgets.filter((category) => category.month !== month);
   const snapshot = categories.map((category) => ({ ...category, month }));
   return { ...normalized, categoryBudgets: [...retained, ...snapshot] };
+}
+
+export type BudgetSummary = {
+  budget: number | null;
+  allocated: number;
+  unallocated: number | null;
+  spent: number;
+  remaining: number | null;
+  percent: number | null;
+  kind: "none" | "under" | "near" | "exact" | "over";
+  tone: "neutral" | "good" | "watch" | "over";
+  statusLabel: "No budget" | "Under budget" | "Near limit" | "On budget" | "Over budget";
+};
+
+export function budgetSummary(profile: FinancialProfile, month: string, spent: number): BudgetSummary {
+  const budget = overallBudgetForMonth(profile, month) ?? null;
+  const allocated = budgetCategoriesForMonth(profile, month).reduce((total, category) => total + category.limit, 0);
+  if (budget === null) return { budget, allocated, unallocated: null, spent, remaining: null, percent: null, kind: "none", tone: "neutral", statusLabel: "No budget" };
+  const remaining = budget - spent;
+  const percent = spent / budget * 100;
+  if (remaining < 0) return { budget, allocated, unallocated: budget - allocated, spent, remaining, percent, kind: "over", tone: "over", statusLabel: "Over budget" };
+  if (remaining === 0) return { budget, allocated, unallocated: budget - allocated, spent, remaining, percent, kind: "exact", tone: "watch", statusLabel: "On budget" };
+  if (percent >= 85) return { budget, allocated, unallocated: budget - allocated, spent, remaining, percent, kind: "near", tone: "watch", statusLabel: "Near limit" };
+  return { budget, allocated, unallocated: budget - allocated, spent, remaining, percent, kind: "under", tone: "good", statusLabel: "Under budget" };
 }
 
 export type CategoryBudgetPosition = {

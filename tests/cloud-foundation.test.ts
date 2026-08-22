@@ -202,7 +202,9 @@ test("authentication callbacks exchange once and redirect without callback param
   const callbackSource = readFileSync(join(root, "app/auth/callback/route.ts"), "utf8");
   const formSource = readFileSync(join(root, "components/auth-forms.tsx"), "utf8");
   assert.match(callbackSource, /exchangeCodeForSession\(code\)/);
-  assert.match(callbackSource, /return NextResponse\.redirect\(new URL\(next, request\.url\)\)/);
+  assert.match(callbackSource, /const destination = new URL\(next, request\.url\)/);
+  assert.match(callbackSource, /destination\.pathname === "\/auth\/reset"[\s\S]*cookies\.set\("awn-recovery", "verified"/);
+  assert.match(callbackSource, /return response/);
   assert.doesNotMatch(callbackSource, /searchParams\.set\("(code|token|email)"/);
   assert.match(formSource, /resetPasswordForEmail\(email, \{ redirectTo: callbackUrl\("\/auth\/callback\?next=\/auth\/reset"\) \}\)/);
 });

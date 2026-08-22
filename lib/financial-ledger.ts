@@ -9,6 +9,13 @@ export type LedgerMutationResult = { ok: true; profile: FinancialProfile; balanc
 
 export const orderTransactions = (transactions: Transaction[]) => [...transactions].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 
+export function transferValidationMessage(source: string, destination: string) {
+  if (!source) return "Choose where the transfer is coming from.";
+  if (!destination) return "Choose where the transfer is going.";
+  if (source === destination) return "Choose different From and To balances.";
+  return null;
+}
+
 export function normalizeTransaction(profile: FinancialProfile, transaction: Transaction): Transaction {
   if (transaction.type === "income") return transaction.destinationKind || !transaction.destinationAccountId ? transaction : { ...transaction, destinationKind: "account", destinationId: transaction.destinationAccountId };
   if (transaction.type === "expense") {
@@ -104,10 +111,12 @@ function applyOne(profile: FinancialProfile, state: LedgerBalances, raw: Transac
       changeAsset(state, source, -transaction.amount);
     }
   } else if (transaction.type === "transfer") {
+    const endpointError = transferValidationMessage(transaction.sourceKind ? `${transaction.sourceKind}:${transaction.sourceId ?? ""}` : "", transaction.destinationKind ? `${transaction.destinationKind}:${transaction.destinationId ?? ""}` : "");
+    if (endpointError) return endpointError;
     const source = assetKey(profile, transaction.sourceKind, transaction.sourceId);
     const destination = transaction.destinationKind === "credit" && transaction.destinationId && state.cards[transaction.destinationId] !== undefined ? `credit:${transaction.destinationId}` : assetKey(profile, transaction.destinationKind, transaction.destinationId);
     if (!source || !destination) return "Choose valid transfer endpoints.";
-    if (source === destination) return "Choose two different places for the transfer.";
+    if (source === destination) return "Choose different From and To balances.";
     const available = assetBalance(state, source);
     if (transaction.amount > available) return `${assetLabel(profile, source)} has ${money(profile, available)} available. This transaction requires ${money(profile, transaction.amount)}.`;
     if (destination.startsWith("credit:")) {

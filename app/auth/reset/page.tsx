@@ -1,2 +1,7 @@
 import { AuthForm } from "@/components/auth-forms";
-export default function ResetPasswordPage() { return <AuthForm mode="reset" />; }
+import { cookies } from "next/headers";
+
+export default async function ResetPasswordPage() {
+  const recoveryAuthorized = (await cookies()).get("awn-recovery")?.value === "verified";
+  return <AuthForm mode="reset" recoveryAuthorized={recoveryAuthorized} />;
+}
