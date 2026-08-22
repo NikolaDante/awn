@@ -1,27 +1,43 @@
 # AWN Supabase setup
 
-Milestone 5A establishes authentication and the database contract. AWN still reads and writes the existing local profile only; this milestone deliberately has no local-data migration or cloud financial-data API.
+Supabase is AWN’s authoritative financial persistence layer. The browser uses only the project URL and publishable key; no service-role credential belongs in the app, client bundle, source control, or logs.
 
-## Create a project and configure the application
+## Project setup
 
-1. Create a Supabase project and apply every migration in `supabase/migrations/` in filename order using the Supabase SQL editor or your normal migration workflow. This includes the initial financial foundation (`20260809000000_initial_financial_foundation.sql`) and the additive profile-trigger repair (`20260809010000_create_missing_financial_profiles.sql`).
-2. Copy `.env.example` to `.env.local` and fill in only the project URL and browser-safe publishable key. Keep `.env.local` untracked. Never put secrets in source control or browser code.
-3. In Supabase Auth URL Configuration, set the Site URL to `http://localhost:3001` for local development and add these redirect URLs:
-   - `http://localhost:3001/auth/callback`
-   - `http://localhost:3001/auth/callback?next=/auth/reset`
-   - the equivalent production callback and recovery URLs, for example `https://app.example.com/auth/callback` and `https://app.example.com/auth/callback?next=/auth/reset`
-4. Enable email/password sign-in. Confirm the configured email provider and templates send confirmation and recovery links to the callback URLs above.
-5. Start AWN with `pnpm dev -- --port 3001`, then test sign-up, email verification, sign-in, sign-out, password reset, and a protected route such as `/dashboard`.
+1. Apply every file in `supabase/migrations/` in filename order. The Phase 3 migration evolves the existing financial foundation rather than creating a parallel model.
+2. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Keep `.env.local` untracked.
+3. Configure Supabase Auth with the local and deployed callback/recovery URLs described in `docs/PREVIEW-DEPLOYMENT.md`.
+4. Enable email/password authentication and verify sign-up, confirmation, sign-in, sign-out, and recovery with a controlled test address.
 
-## Security and migration notes
+## Household ownership model
 
-- The browser receives only the publishable key. A Supabase service-role key must never be added to this app, its environment examples, client bundle, or logs.
-- Every application table has row-level security. Explicit SELECT, INSERT, UPDATE, and DELETE policies enforce `auth.uid()` where client access is intended, and ownership triggers also reject `user_id` reassignment. Transaction foreign keys include `user_id`, so a transaction cannot reference another user’s planning data.
-- The additive repair creates a narrowly scoped `SECURITY DEFINER` trigger on `auth.users` that creates one default financial profile per new user and backfills only users missing one. Its empty search path, schema-qualified references, and revoked client EXECUTE privileges keep the elevated operation internal.
-- Anonymous and public table privileges are explicitly revoked. Authenticated clients receive owner-scoped CRUD only on financial domain tables. Migration records and security events remain internal and have no direct client grants.
-- Security events are reserved for trusted server or database creation. They are not user-editable and must not be treated as user-submitted audit evidence.
-- `FORCE ROW LEVEL SECURITY` is intentionally not enabled because trusted Supabase table-owner and server roles need to apply migrations and create internal records. AWN application code still uses only the publishable key and never bypasses RLS.
-- Amounts are integer minor units in the database. The profile stores the supported base currency, so cross-currency conversion is intentionally not modeled in this milestone.
-- Historical transaction labels are snapshots. Stable local entity IDs and non-null per-user idempotency keys are included so a later opt-in migration can preserve references and retry safely. Linked planning records use deferred `NO ACTION`, so ordinary deletion cannot remove transaction history while an auth-user deletion can still cascade through the complete owned dataset.
-- Confirmation and recovery emails are subject to Supabase project email limits. During development, use a controlled test address and allow for provider throttling before retrying.
-- After applying the migration, use the Supabase dashboard’s table and policy views to verify that RLS is enabled and that no anonymous policy exists for AWN tables.
+- Every authenticated user automatically receives one personal `My Household` workspace and an `owner` membership. No extra onboarding screen is required.
+- Durable financial state belongs to `household_id`, not directly to an individual user. `household_members` is the authorization boundary and already supports `owner` and `member` roles.
+- The provider resolves an `activeHouseholdId`. Phase 3 always chooses the user’s personal Household; switching, invitations, member management, and household merging are deferred.
+- Deleting an auth user removes that user’s membership and nulls creator attribution. It does not delete a Household merely because its creator disappears. The current personal Household may consequently remain ownerless until shared-ownership lifecycle rules are added.
+
+## Financial persistence
+
+`financial_profiles.profile_data` is the canonical Phase 2 financial snapshot. Saving the complete validated profile in one PostgreSQL RPC keeps transactions, balances, references, budget snapshots, goals, cash, and onboarding settings atomic. Existing normalized tables are retained and moved behind the same Household RLS boundary for migration/history compatibility; the app does not treat them as a second source of truth.
+
+The save RPC uses a row lock and expected revision. A stale browser receives a conflict instead of overwriting newer data. Transaction creator/updater attribution is assigned by the database from `auth.uid()` and cannot be forged by the browser.
+
+## Existing browser-data migration
+
+On first authenticated load:
+
+- an initialized cloud profile always wins;
+- an empty Household plus a valid authenticated-user-namespaced local profile imports that profile once;
+- the cloud write and migration marker commit together;
+- a revision conflict reloads the now-authoritative cloud profile;
+- the old browser record is retained and also copied once to `awn.financial.profile.cloud-migration-backup.v2:<user-id>`.
+
+The backup is recovery-only and is never read as authoritative after the Household is initialized. It may be removed in a later, separately approved cleanup phase.
+
+## Security model
+
+- RLS is enabled on Household and financial tables. Reads require Household membership.
+- Clients cannot create memberships or assign an arbitrary owner. Personal Household initialization is a narrowly scoped `SECURITY DEFINER` operation bound to `auth.uid()` or the auth-user trigger.
+- Financial mutation uses the membership-checked atomic RPC. Direct writes remain revoked, so UUID knowledge alone never grants access.
+- Anonymous/public table access is revoked. Security events remain non-user-editable.
+- No realtime guarantee exists in Phase 3. Another browser may need a refresh to see a committed change.

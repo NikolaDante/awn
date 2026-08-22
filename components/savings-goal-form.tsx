@@ -7,7 +7,7 @@ import { financialReferenceDate } from "@/lib/financial-date";
 import { normalizeSavingsTargetMonth, savingsTargetMonth } from "@/lib/onboarding";
 import { newLocalId, type FinancialProfile, type SavingsGoal } from "@/lib/financial-types";
 
-export function SavingsGoalForm({ profile, existing, onCancel, onSave }: { profile: FinancialProfile; existing?: SavingsGoal; onCancel: () => void; onSave: (goal: SavingsGoal) => boolean | void }) {
+export function SavingsGoalForm({ profile, existing, onCancel, onSave }: { profile: FinancialProfile; existing?: SavingsGoal; onCancel: () => void; onSave: (goal: SavingsGoal) => Promise<boolean> | boolean | void }) {
   const [name, setName] = useState(existing?.name ?? "");
   const [target, setTarget] = useState(existing?.target ?? 0);
   const [saved, setSaved] = useState(existing?.saved ?? 0);
@@ -15,7 +15,7 @@ export function SavingsGoalForm({ profile, existing, onCancel, onSave }: { profi
   const [targetMonth, setTargetMonth] = useState(existing ? savingsTargetMonth(existing) : "");
   const [priority, setPriority] = useState(existing?.priority ?? Math.min(5, profile.savingsGoals.length + 1));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const submit = () => {
+  const submit = async () => {
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = "Add a name for this savings goal.";
     if (target <= 0) next.target = "Target amount must be above zero.";
@@ -24,7 +24,7 @@ export function SavingsGoalForm({ profile, existing, onCancel, onSave }: { profi
     if (targetMonth && !normalizeSavingsTargetMonth(targetMonth)) next.targetMonth = "Choose a valid month and year.";
     setErrors(next);
     if (Object.keys(next).length) return;
-    onSave({ id: existing?.id ?? newLocalId(), name: name.trim(), target, saved, contribution, startDate: existing?.startDate ?? financialReferenceDate(profile), targetDate: normalizeSavingsTargetMonth(targetMonth), priority });
+    await onSave({ id: existing?.id ?? newLocalId(), name: name.trim(), target, saved, contribution, startDate: existing?.startDate ?? financialReferenceDate(profile), targetDate: normalizeSavingsTargetMonth(targetMonth), priority });
   };
   return <div className="savings-goal-fields onboarding-item-form">
     <FormField label="Goal name" error={errors.name} className="savings-goal-field-wide"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Emergency fund" /></FormField>

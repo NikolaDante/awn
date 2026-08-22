@@ -10,7 +10,7 @@ import { currencies, newLocalId, type Account, type CreditCard, type Currency, t
 export type FinancialItemKind = "account" | "debit" | "credit";
 export type FinancialItem = Account | DebitCard | CreditCard;
 
-export function FinancialItemForm({ kind, existing, profile, onCancel, onSave }: { kind: FinancialItemKind; existing?: FinancialItem; profile: FinancialProfile; onCancel: () => void; onSave: (item: FinancialItem) => boolean | void }) {
+export function FinancialItemForm({ kind, existing, profile, onCancel, onSave }: { kind: FinancialItemKind; existing?: FinancialItem; profile: FinancialProfile; onCancel: () => void; onSave: (item: FinancialItem) => Promise<boolean> | boolean | void }) {
   const existingDebit = kind === "debit" ? existing as DebitCard | undefined : undefined;
   const initialCountry = existing && "country" in existing ? displayCountry(existing.country) : displayCountry(profile.country) === "Country not set" ? "United Arab Emirates" : displayCountry(profile.country);
   const [name, setName] = useState(existing?.name ?? "");
@@ -29,7 +29,7 @@ export function FinancialItemForm({ kind, existing, profile, onCancel, onSave }:
   const label = kind === "account" ? "account" : `${kind} card`;
 
   const updateCountry = (value: string) => { setCountry(value); const suggested = suggestedCurrency(value); if (suggested) setCurrency(suggested); };
-  const submit = () => {
+  const submit = async () => {
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = `Add a bank or ${kind === "account" ? "account" : "card"} name.`;
     if (lastFour && !/^\d{4}$/.test(lastFour)) next.lastFour = "Enter four digits, or leave this empty.";
@@ -45,7 +45,7 @@ export function FinancialItemForm({ kind, existing, profile, onCancel, onSave }:
     if (Object.keys(next).length) return;
     const common = { id: existing?.id ?? newLocalId(), name: name.trim(), country, currency, lastFour: lastFour || undefined, purpose: normalizeFinancialPurpose(purpose) };
     const item = kind === "account" ? { ...common, type: accountType, balance } as Account : kind === "debit" ? { ...common, linkedAccountId: linkedAccountId || undefined } as DebitCard : { ...common, limit, owed, dueDay } as CreditCard;
-    if (onSave(item) === false) setErrors({ form: "AWN could not save these changes." });
+    if (await onSave(item) === false) setErrors({ form: "AWN could not save these changes." });
   };
 
   return <div className="cards-form onboarding-item-form">

@@ -3,7 +3,7 @@ import { normalizeBudgetSnapshots } from "@/lib/financial-budget";
 import { financialReferenceMonth } from "@/lib/financial-date";
 import { normalizeFinancialPurposes } from "@/lib/financial-purpose";
 import { normalizeLedgerProfile } from "@/lib/financial-ledger";
-import { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, financialStorageKey, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage } from "@/lib/financial-storage-core";
+import { cloudMigrationBackupKey, FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, financialStorageKey, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage } from "@/lib/financial-storage-core";
 
 export { FINANCIAL_STORAGE_KEY, LEGACY_FINANCIAL_STORAGE_KEY, financialStorageKey, isFinancialProfile, migrateLegacyProfile, resetFinancialStorage };
 type LoadResult = { profile: FinancialProfile | null; issue: string | null };
@@ -44,3 +44,16 @@ export function loadFinancialProfile(ownerId: string): LoadResult {
 
 export function saveFinancialProfile(ownerId: string, profile: FinancialProfile) { if (typeof window === "undefined") return false; try { window.localStorage.setItem(financialStorageKey(ownerId), JSON.stringify(normalizeFinancialPurposes(profile))); return true; } catch { return false; } }
 export function resetFinancialProfile(ownerId: string) { if (typeof window !== "undefined") resetFinancialStorage(window.localStorage, ownerId); }
+
+export function backupFinancialProfileForCloudMigration(ownerId: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    const source = window.localStorage.getItem(financialStorageKey(ownerId))
+      ?? window.localStorage.getItem(FINANCIAL_STORAGE_KEY)
+      ?? window.localStorage.getItem(LEGACY_FINANCIAL_STORAGE_KEY);
+    if (!source) return false;
+    const key = cloudMigrationBackupKey(ownerId);
+    if (!window.localStorage.getItem(key)) window.localStorage.setItem(key, source);
+    return window.localStorage.getItem(key) === source;
+  } catch { return false; }
+}

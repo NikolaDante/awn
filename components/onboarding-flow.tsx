@@ -22,7 +22,7 @@ type ItemEditor = { kind: FinancialItemKind; item?: FinancialItem };
 
 export function OnboardingFlow() {
   const router = useRouter();
-  const { profile, ready, issue, save } = useFinancialProfile();
+  const { profile, ready, issue, retry, save } = useFinancialProfile();
   const [draft, setDraft] = useState<FinancialProfile | null>(null);
   const [budgetStartDayInput, setBudgetStartDayInput] = useState("1");
   const [step, setStep] = useState(0);
@@ -48,12 +48,12 @@ export function OnboardingFlow() {
 
   useEffect(() => {
     if (!draft) return;
-    save({ ...draft, onboarding: { ...draft.onboarding, currentStep: step } });
+    void save({ ...draft, onboarding: { ...draft.onboarding, currentStep: step } });
   }, [draft, step, save]);
 
   useEffect(() => { heading.current?.focus(); }, [step]);
 
-  if (issue) return <main className="onboarding-page"><section className="onboarding-card"><h1>Your saved plan needs attention.</h1><p>{issue}</p><Link className="app-button app-button-light" href="/dashboard">Return to dashboard</Link></section></main>;
+  if (issue) return <main className="onboarding-page"><section className="onboarding-card"><h1>We couldn’t load your financial data.</h1><p>{issue}</p><button className="app-button app-button-light" type="button" onClick={retry}>Try again</button></section></main>;
   if (!ready || !draft) return <main className="onboarding-page"><p className="loading-copy">Loading your setup…</p></main>;
 
   const change = (patch: Partial<FinancialProfile>) => { setErrors({}); setDraft((current) => current ? { ...current, ...patch } : current); };
@@ -72,11 +72,11 @@ export function OnboardingFlow() {
     return Object.keys(next).length === 0;
   };
   const continueStep = () => { if (validateStep()) go(step + 1); };
-  const complete = () => {
+  const complete = async () => {
     if (submitting) return;
     setSubmitting(true);
     const completed = { ...draft, onboarding: { currentStep: 6, completed: true } };
-    if (save(completed)) router.replace("/dashboard"); else setSubmitting(false);
+    if (await save(completed)) router.replace("/dashboard"); else setSubmitting(false);
   };
   const editorOpen = Boolean(itemEditor || goalEditor !== undefined || categoryEditor !== undefined);
 

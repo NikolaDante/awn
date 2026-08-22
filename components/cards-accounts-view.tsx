@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AppIcon } from "@/components/app-icons";
 import { PageHeader } from "@/components/application-ui";
 import { FinancialItemForm, type FinancialItem } from "@/components/financial-item-form";
-import { useFinancialProfile } from "@/components/financial-provider";
+import { useFinancialProfile, type FinancialSave } from "@/components/financial-provider";
 import { MoneyInput } from "@/components/money-input";
 import { useModalDialog } from "@/components/use-modal-dialog";
 import { calculateActualSummary, formatMoney } from "@/lib/financial-calculations";
@@ -74,7 +74,7 @@ export function AccountsCardsView({ initialAction }: { initialAction?: "add" }) 
   const totalOwed = profile.creditCards.reduce((total, card) => total + (actual.cards[card.id] ?? card.owed), 0);
   const totalAvailableCredit = profile.creditCards.reduce((total, card) => total + Math.max(0, actual.availableCredit[card.id] ?? card.limit - card.owed), 0);
 
-  const remove = () => {
+  const remove = async () => {
     if (!deleting) return;
     let next = profile;
     if (deleting.kind === "account") {
@@ -84,7 +84,7 @@ export function AccountsCardsView({ initialAction }: { initialAction?: "add" }) 
       if (hasLinkedCardActivity(profile, deleting.id)) return setDeleteError(removalGuardMessage("credit-card"));
       next = { ...profile, creditCards: profile.creditCards.filter((item) => item.id !== deleting.id) };
     } else next = { ...profile, debitCards: debitCards.filter((item) => item.id !== deleting.id) };
-    if (save(next)) { setDeleting(undefined); setDeleteError(""); }
+    if (await save(next)) { setDeleting(undefined); setDeleteError(""); }
   };
 
   const requestDelete = (kind: DeleteTarget["kind"], id: string, label: string) => { setDeleteError(""); setDeleting({ kind, id, label }); };
@@ -140,10 +140,10 @@ function CashSection({ balance, profile, edit }: { balance: number; profile: Fin
   return <section className="accounts-section-row cash-section-row" aria-labelledby="cash-section-title"><div className="cash-section-content"><div><p className="app-eyebrow">Cash</p><h2 id="cash-section-title">Cash</h2></div><div className="cash-section-balance"><span>Cash balance</span><strong>{formatMoney(balance, profile.currency)}</strong></div><button className="app-button app-button-secondary" type="button" onClick={edit}><AppIcon name="edit" />Edit balance</button></div></section>;
 }
 
-function CashBalanceDialog({ profile, current, save, close }: { profile: FinancialProfile; current: number; save: (profile: FinancialProfile) => boolean; close: () => void }) {
+function CashBalanceDialog({ profile, current, save, close }: { profile: FinancialProfile; current: number; save: FinancialSave; close: () => void }) {
   const [balance, setBalance] = useState(current);
   const [error, setError] = useState("");
-  const submit = () => { const result = setCurrentCashBalance(profile, balance); if (!result.ok) return setError(result.error); if (save(result.profile)) close(); };
+  const submit = async () => { const result = setCurrentCashBalance(profile, balance); if (!result.ok) return setError(result.error); if (await save(result.profile)) close(); };
   return <DialogFrame title="Edit cash balance" eyebrow="Cash" close={close} className="cash-balance-dialog"><label className="form-field">Current cash balance<MoneyInput value={balance} onValueChange={(value) => { setBalance(value); setError(""); }} /></label><p className="form-help">Use this for a manual correction. AWN will not create a fake transaction.</p>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>Save balance</button></div></DialogFrame>;
 }
 
@@ -203,15 +203,15 @@ export function AssetCreationWorkflow({ close }: { close: () => void }) {
     : <AssetChoiceDialog close={close} choose={(kind) => setEditor({ kind })} />;
 }
 
-function EditorDialog({ editor, profile, save, close }: { editor: Editor; profile: FinancialProfile; save: (profile: FinancialProfile) => boolean; close: () => void }) {
+function EditorDialog({ editor, profile, save, close }: { editor: Editor; profile: FinancialProfile; save: FinancialSave; close: () => void }) {
   const existing = editor.value;
   const label = editor.kind === "account" ? "account" : `${editor.kind} card`;
-  const persist = (item: FinancialItem) => {
+  const persist = async (item: FinancialItem) => {
     let next = profile;
     if (editor.kind === "account") next = { ...profile, accounts: upsert(profile.accounts, item as Account) };
     else if (editor.kind === "debit") next = { ...profile, debitCards: upsert(profile.debitCards ?? [], item as DebitCard) };
     else next = { ...profile, creditCards: upsert(profile.creditCards, item as CreditCard) };
-    const saved = save(next);
+    const saved = await save(next);
     if (saved) close();
     return saved;
   };
