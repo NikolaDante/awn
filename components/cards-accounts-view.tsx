@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { AppIcon } from "@/components/app-icons";
 import { PageHeader } from "@/components/application-ui";
 import { FinancialItemForm, type FinancialItem } from "@/components/financial-item-form";
@@ -152,7 +152,9 @@ function SectionActions({ addLabel, add, viewAllLabel, viewAll }: { addLabel: st
 }
 
 function ExpandableSection({ title, eyebrow, metrics, children }: { title: string; eyebrow: string; metrics: string[]; children: React.ReactNode }) {
-  return <details className="accounts-section-row"><summary><div><p className="app-eyebrow">{eyebrow}</p><h2>{title}</h2></div><div className="accounts-section-metrics">{metrics.map((metric, index) => <span key={metric} className={index ? "" : "is-primary"}>{metric}</span>)}</div><span className="details-toggle" aria-hidden="true">+</span></summary><div className="accounts-section-content">{children}</div></details>;
+  const [open, setOpen] = useState(false);
+  const contentId = useId();
+  return <section className="accounts-section-row" data-open={open}><button className="accounts-section-toggle" type="button" aria-expanded={open} aria-controls={contentId} aria-label={`${open ? "Collapse" : "Expand"} ${title}`} onClick={() => setOpen((current) => !current)}><div><p className="app-eyebrow">{eyebrow}</p><h2>{title}</h2></div><div className="accounts-section-metrics">{metrics.map((metric, index) => <span key={metric} className={index ? "" : "is-primary"}>{metric}</span>)}</div><span className="details-toggle" aria-hidden="true">+</span></button><div id={contentId} className="accounts-section-content" hidden={!open}>{children}</div></section>;
 }
 
 function AccountCard({ account, balance, profile, edit, remove }: { account: Account; balance: number; profile: FinancialProfile; edit: () => void; remove: () => void }) {

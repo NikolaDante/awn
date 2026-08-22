@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/app-shell";
 import { PageHeader } from "@/components/application-ui";
 import { PlanView } from "@/components/finance-app-views";
 import { readPlanViewState } from "@/lib/financial-navigation";
@@ -7,5 +6,5 @@ type PlanSearchParams = Promise<{ tab?: string | string[]; action?: string | str
 
 export default async function PlanPage({ searchParams }: { searchParams: PlanSearchParams }) {
   const view = readPlanViewState(await searchParams);
-  return <AppShell><div className="app-page plan-page"><PageHeader title="Plan" eyebrow="Budgets and goals" /><PlanView initialTab={view.tab} initialAction={view.action} /></div></AppShell>;
+  return <div className="app-page plan-page"><PageHeader title="Plan" eyebrow="Budgets and goals" /><PlanView initialTab={view.tab} initialAction={view.action} /></div>;
 }

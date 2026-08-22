@@ -1,19 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AppIcon } from "@/components/app-icons";
 import { AnimatedMoney } from "@/components/animated-money";
 import { AssetCreationWorkflow } from "@/components/cards-accounts-view";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { MoneyInput } from "@/components/money-input";
+import { ConfirmationDialog, ModalDialog } from "@/components/modal-dialog";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
-import { AddTransactionButton, AllTransactionsDialog, TransactionForm } from "@/components/transactions-ui";
+import { AddTransactionButton, AllTransactionsDialog, TransactionDeleteDialog, TransactionForm } from "@/components/transactions-ui";
 import { useModalDialog } from "@/components/use-modal-dialog";
 import { budgetCategoriesForMonth, budgetSummary, categoryBudgetPosition, hasOverallBudget, monthlyBudgetPosition, overallBudgetForMonth, replaceBudgetSnapshot, replaceOverallBudgetSnapshot } from "@/lib/financial-budget";
 import { calculateActualSummary, formatMoney } from "@/lib/financial-calculations";
 import { budgetPeriodForDate, budgetPeriodForKey, dateInBudgetPeriod, financialReferenceDate, financialReferenceMonth, financialReferencePeriod } from "@/lib/financial-date";
-import { mutateLedger } from "@/lib/financial-ledger";
 import { profileSavingsGoalStatus } from "@/lib/financial-goal-status";
 import { deleteSavingsGoal, savingsGoalTotals, upsertSavingsGoal } from "@/lib/financial-savings";
 import { transactionHistoryLabel } from "@/lib/financial-reference-guards";
@@ -137,10 +137,10 @@ export function HistoryView() {
 }
 
 function MonthCard({ month, profile, open = false }: { month: MonthSummary; profile: FinancialProfile; open?: boolean }) {
-  const { save } = useFinancialProfile();
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [transactionsDialogOpen, setTransactionsDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction>();
+  const [deleting, setDeleting] = useState<Transaction>();
   const budgetPosition = monthlyBudgetPosition(month.budget, month.spent);
   const budgetTone = budgetPosition.tone === "over" ? "negative" : budgetPosition.tone === "neutral" ? "neutral" : "positive";
   const budgetCopy = budgetPosition.difference === null ? "Not recorded" : formatMoney(budgetPosition.difference, profile.currency);
@@ -155,7 +155,8 @@ function MonthCard({ month, profile, open = false }: { month: MonthSummary; prof
   return <>
     {categoryDialogOpen && <HistoryCategoriesDialog month={month} profile={profile} close={() => setCategoryDialogOpen(false)} />}
     {editing && <TransactionForm editing={editing} close={() => setEditing(undefined)} />}
-    {transactionsDialogOpen && <AllTransactionsDialog transactions={month.transactions} profile={profile} readOnly={false} close={() => setTransactionsDialogOpen(false)} edit={(item) => { setTransactionsDialogOpen(false); setEditing(item); }} remove={async (item) => { if (!window.confirm("Delete this historical transaction? Its full financial effect will be reversed.")) return; const result = mutateLedger(profile, { kind: "delete", id: item.id }); if (result.ok) { if (await save(result.profile)) setTransactionsDialogOpen(false); } else window.alert(result.error); }} />}
+    {transactionsDialogOpen && <AllTransactionsDialog transactions={month.transactions} profile={profile} readOnly={false} close={() => setTransactionsDialogOpen(false)} edit={(item) => { setTransactionsDialogOpen(false); setEditing(item); }} remove={setDeleting} />}
+    {deleting && <TransactionDeleteDialog transaction={deleting} close={() => setDeleting(undefined)} />}
     <details className="month-card history-month-card" open={open}><summary><div><p className="app-eyebrow">Budget-period summary</p><h2>{budgetPeriodForKey(profile.budgetStartDay, month.month).label}</h2></div><div className="month-card-metrics"><span>Income<strong>{formatMoney(month.income, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(month.spent, profile.currency)}</strong></span><span>Net<strong className={month.income - month.spent >= 0 ? "positive" : "negative"}>{month.income - month.spent >= 0 ? "+" : ""}{formatMoney(month.income - month.spent, profile.currency)}</strong></span><span>{budgetPosition.metricLabel}<strong className={budgetTone}>{budgetCopy}</strong></span></div><div className="history-status-stack"><Status value={budgetPosition.tone} label={budgetPosition.statusLabel} />{showCategoryWarning && <span className="status-pill is-watch category-over-warning">{categoryOverCount} {categoryOverCount === 1 ? "category" : "categories"} over</span>}</div><span className="details-toggle" aria-hidden="true">+</span></summary>
       <div className="month-detail-grid"><Metric label="Highest expense" value={formatMoney(month.highestExpense, profile.currency)} detail={highestExpenseTitle} /><Metric label="Daily average" value={formatMoney(Math.round(month.spent / days), profile.currency)} detail={`Average across ${transactionCopy}`} /><Metric label="Top category" value={month.topCategory} detail="Highest total spending" /><Metric label="Budget difference" value={budgetPosition.difference === null ? "Not recorded" : formatMoney(budgetPosition.difference, profile.currency)} detail={budgetPosition.statusLabel} valueClassName={budgetPosition.tone === "over" ? "negative" : budgetPosition.tone === "good" ? "positive" : "neutral"} /></div>
       {topCategories.length > 0 && <div className="category-mini-list">{topCategories.map((category) => { const overBudget = category.spent > category.limit; return <div className={overBudget ? "is-over-budget" : undefined} key={category.id}><span>{category.name}</span><Progress value={month.spent ? category.spent / month.spent * 100 : 0} tone={overBudget ? "over" : "good"} label={`${category.name} share of spending`} /><strong className={overBudget ? "negative" : undefined}>{overBudget ? "-" : ""}{formatMoney(category.spent, profile.currency)}</strong></div>; })}</div>}
@@ -182,43 +183,9 @@ function historyPreviewCategories(month: MonthSummary) {
   return [...overBudget, ...withinBudget].slice(0, 4);
 }
 
-function useHistoryDialog(close: () => void) {
-  const dialogRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const scrollY = window.scrollY;
-    const body = document.body;
-    const root = document.documentElement;
-    const previousBody = { position: body.style.position, top: body.style.top, left: body.style.left, right: body.style.right, width: body.style.width, overflow: body.style.overflow, paddingRight: body.style.paddingRight };
-    const previousRoot = { overflow: root.style.overflow, overscrollBehavior: root.style.overscrollBehavior, scrollBehavior: root.style.scrollBehavior };
-    const scrollbarWidth = window.innerWidth - root.clientWidth;
-    root.style.overflow = "hidden";
-    root.style.overscrollBehavior = "none";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.left = "0";
-    body.style.right = "0";
-    body.style.width = "100%";
-    body.style.overflow = "hidden";
-    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
-    dialogRef.current?.focus({ preventScroll: true });
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      Object.assign(body.style, previousBody);
-      root.style.overflow = previousRoot.overflow;
-      root.style.overscrollBehavior = previousRoot.overscrollBehavior;
-      root.style.scrollBehavior = "auto";
-      window.scrollTo(0, scrollY);
-      root.style.scrollBehavior = previousRoot.scrollBehavior;
-    };
-  }, [close]);
-  return dialogRef;
-}
-
 function HistoryCategoriesDialog({ month, profile, close }: { month: MonthSummary; profile: FinancialProfile; close: () => void }) {
   const categories = historyCategories(month);
-  const dialogRef = useHistoryDialog(close);
+  const dialogRef = useModalDialog<HTMLElement>(close);
   return <div className="dialog-backdrop history-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }} onTouchMove={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}><section className="confirm-dialog history-category-dialog" role="dialog" aria-modal="true" aria-labelledby={`history-categories-${month.month}`} tabIndex={-1} ref={dialogRef}><div className="repeat-card-heading history-dialog-header"><div><p className="app-eyebrow">{budgetPeriodForKey(profile.budgetStartDay, month.month).label}</p><h2 id={`history-categories-${month.month}`}>All category expenses</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close category expenses"><AppIcon name="close" /></button></div><div className="history-category-list history-dialog-scroll" tabIndex={0}>{categories.map((category) => { const position = categoryBudgetPosition(category.limit, category.spent); return <article key={category.id}><div className="history-category-heading"><strong>{category.name}</strong><Status value={position.tone} label={position.statusLabel} /></div><div className="history-category-values"><span>Budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(category.spent, profile.currency)}</strong></span><span>{position.differenceLabel}<strong className={position.kind === "over" || position.kind === "unbudgeted" ? "negative" : position.kind === "no-budget" ? "neutral" : "positive"}>{formatMoney(position.difference, profile.currency)}</strong></span></div>{position.percent !== null && <Progress value={position.percent} tone={position.tone === "neutral" ? "good" : position.tone} label={`${category.name} budget used`} />}</article>; })}</div></section></div>;
 }
 
@@ -297,15 +264,13 @@ function PlanCategoryRow({ category, profile, edit }: { category: PlannedCategor
 }
 
 function MonthlyBudgetDialog({ budget: currentBudget, profile, save, close }: { budget: number; profile: FinancialProfile; save: (budget: number) => Promise<boolean>; close: () => void }) {
-  const dialogRef = useHistoryDialog(close);
   const [budget, setBudget] = useState(currentBudget);
   const [error, setError] = useState("");
   const submit = async () => { if (budget <= 0) return setError("Enter a monthly budget above zero."); if (await save(budget)) close(); else setError("We couldn’t save this budget. Check your connection and try again."); };
-  return <div className="dialog-backdrop app-dialog-backdrop"><section className="confirm-dialog plan-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="monthly-budget-editor-title" tabIndex={-1} ref={dialogRef}><div className="repeat-card-heading"><div><p className="app-eyebrow">Monthly budget</p><h2 id="monthly-budget-editor-title">{currentBudget ? "Edit monthly budget" : "Create monthly budget"}</h2></div><button className="dialog-close-button" type="button" onClick={close} aria-label="Close monthly budget editor"><AppIcon name="close" /></button></div>{currentBudget > 0 && <div className="plan-editor-context"><span>Current budget<strong>{formatMoney(currentBudget, profile.currency)}</strong></span></div>}<label className="form-field">{currentBudget ? "New budget amount" : "Monthly budget amount"}<MoneyInput value={budget} onValueChange={(value) => { setBudget(value); setError(""); }} aria-invalid={!!error} /></label><p className="form-help">Category allocations stay independent and will not change.</p>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>{currentBudget ? "Save changes" : "Create budget"}</button></div></section></div>;
+  return <ModalDialog title={currentBudget ? "Edit monthly budget" : "Create monthly budget"} eyebrow="Monthly budget" close={close} closeLabel="Close monthly budget editor" className="plan-editor-dialog">{currentBudget > 0 && <div className="plan-editor-context"><span>Current budget<strong>{formatMoney(currentBudget, profile.currency)}</strong></span></div>}<label className="form-field">{currentBudget ? "New budget amount" : "Monthly budget amount"}<MoneyInput value={budget} onValueChange={(value) => { setBudget(value); setError(""); }} aria-invalid={!!error} /></label><p className="form-help">Category allocations stay independent and will not change.</p>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>{currentBudget ? "Save changes" : "Create budget"}</button></div></ModalDialog>;
 }
 
 function CategoryBudgetDialog({ category, categories, monthlyBudget, spent, profile, save, close }: { category: CategoryBudget; categories: CategoryBudget[]; monthlyBudget: number; spent: number; profile: FinancialProfile; save: (categories: CategoryBudget[]) => Promise<boolean>; close: () => void }) {
-  const dialogRef = useHistoryDialog(close);
   const [budget, setBudget] = useState(category.limit);
   const [error, setError] = useState("");
   const exists = categories.some((item) => item.id === category.id);
@@ -314,12 +279,11 @@ function CategoryBudgetDialog({ category, categories, monthlyBudget, spent, prof
   const exceedsBy = Math.max(0, nextTotal - monthlyBudget);
   const remaining = category.limit - spent;
   const submit = async () => { if (budget <= 0) return setError("Enter a category budget above zero."); const next = exists ? categories.map((item) => item.id === category.id ? { ...item, limit: budget } : item) : [...categories, { ...category, limit: budget }]; if (await save(next)) close(); };
-  return <div className="dialog-backdrop app-dialog-backdrop"><section className="confirm-dialog plan-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="category-budget-editor-title" tabIndex={-1} ref={dialogRef}><div className="repeat-card-heading"><div><p className="app-eyebrow">Category budget</p><h2 id="category-budget-editor-title">Edit {category.name}</h2></div><button className="dialog-close-button" type="button" onClick={close} aria-label="Close category budget editor"><AppIcon name="close" /></button></div><div className="plan-editor-context"><span>Category<strong>{category.name}</strong></span><span>Current budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Current spent<strong>{formatMoney(spent, profile.currency)}</strong></span><span>{remaining < 0 ? "Currently over" : "Currently remaining"}<strong className={remaining < 0 ? "negative" : "positive"}>{formatMoney(Math.abs(remaining), profile.currency)}</strong></span></div><label className="form-field">New budget amount<MoneyInput value={budget} onValueChange={(value) => { setBudget(value); setError(""); }} aria-invalid={!!error} /></label>{exceedsBy > 0 && <p className="form-message is-warning" role="status">Category allocations exceed your overall monthly budget by {formatMoney(exceedsBy, profile.currency)}. Your overall budget will stay {formatMoney(monthlyBudget, profile.currency)}.</p>}{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>Save changes</button></div></section></div>;
+  return <ModalDialog title={`Edit ${category.name}`} eyebrow="Category budget" close={close} closeLabel="Close category budget editor" className="plan-editor-dialog"><div className="plan-editor-context"><span>Category<strong>{category.name}</strong></span><span>Current budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Current spent<strong>{formatMoney(spent, profile.currency)}</strong></span><span>{remaining < 0 ? "Currently over" : "Currently remaining"}<strong className={remaining < 0 ? "negative" : "positive"}>{formatMoney(Math.abs(remaining), profile.currency)}</strong></span></div><label className="form-field">New budget amount<MoneyInput value={budget} onValueChange={(value) => { setBudget(value); setError(""); }} aria-invalid={!!error} /></label>{exceedsBy > 0 && <p className="form-message is-warning" role="status">Category allocations exceed your overall monthly budget by {formatMoney(exceedsBy, profile.currency)}. Your overall budget will stay {formatMoney(monthlyBudget, profile.currency)}.</p>}{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={submit}>Save changes</button></div></ModalDialog>;
 }
 
 function AllPlanCategoriesDialog({ categories, profile, edit, close }: { categories: PlannedCategory[]; profile: FinancialProfile; edit?: (category: CategoryBudget) => void; close: () => void }) {
-  const dialogRef = useHistoryDialog(close);
-  return <div className="dialog-backdrop app-dialog-backdrop"><section className="confirm-dialog plan-categories-dialog" role="dialog" aria-modal="true" aria-labelledby="all-plan-categories-title" tabIndex={-1} ref={dialogRef}><div className="repeat-card-heading plan-categories-dialog-header"><div><p className="app-eyebrow">Monthly plan</p><h2 id="all-plan-categories-title">All category budgets</h2></div><button className="dialog-close-button" type="button" onClick={close} aria-label="Close category budgets"><AppIcon name="close" /></button></div><div className="plan-category-list plan-category-dialog-list history-dialog-scroll" tabIndex={0}>{orderedPlanCategories(categories).map((category) => <PlanCategoryRow key={category.id} category={category} profile={profile} edit={edit ? () => edit(category) : undefined} />)}</div></section></div>;
+  return <ModalDialog title="All category budgets" eyebrow="Monthly plan" close={close} closeLabel="Close category budgets" className="plan-categories-dialog"><div className="plan-category-list plan-category-dialog-list history-dialog-scroll" tabIndex={0}>{orderedPlanCategories(categories).map((category) => <PlanCategoryRow key={category.id} category={category} profile={profile} edit={edit ? () => edit(category) : undefined} />)}</div></ModalDialog>;
 }
 
 function SavingsGoals({ profile, goals, add }: { profile: FinancialProfile; goals: SavingsGoal[]; add: () => void }) {
@@ -332,18 +296,17 @@ function SavingsGoals({ profile, goals, add }: { profile: FinancialProfile; goal
 
 function SavingsGoalDialog({ profile, existing, close }: { profile: FinancialProfile; existing?: SavingsGoal; close: () => void }) {
   const { save } = useFinancialProfile();
-  const dialogRef = useModalDialog<HTMLElement>(close);
   const persist = async (goal: SavingsGoal) => { const saved = await save(upsertSavingsGoal(profile, goal)); if (saved) close(); return saved; };
-  return <div className="dialog-backdrop app-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section ref={dialogRef} tabIndex={-1} className="confirm-dialog savings-goal-dialog" role="dialog" aria-modal="true" aria-labelledby="savings-goal-title"><div className="repeat-card-heading"><div><p className="app-eyebrow">Savings goals</p><h2 id="savings-goal-title">{existing ? `Edit ${existing.name}` : "Add savings goal"}</h2></div><button className="dialog-close-button" type="button" onClick={close} aria-label="Close savings goal form"><AppIcon name="close" /></button></div><SavingsGoalForm profile={profile} existing={existing} onCancel={close} onSave={persist} /></section></div>;
+  return <ModalDialog title={existing ? `Edit ${existing.name}` : "Add savings goal"} eyebrow="Savings goals" close={close} closeLabel="Close savings goal form" className="savings-goal-dialog"><SavingsGoalForm profile={profile} existing={existing} onCancel={close} onSave={persist} /></ModalDialog>;
 }
 
 function SavingsGoalDeleteDialog({ goal, close }: { goal: SavingsGoal; close: () => void }) {
   const { profile, save } = useFinancialProfile();
-  const dialogRef = useModalDialog<HTMLElement>(close);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   if (!profile) return null;
-  const remove = async () => { if (await save(deleteSavingsGoal(profile, goal.id))) close(); else setError("We couldn’t delete this goal. Check your connection and try again."); };
-  return <div className="dialog-backdrop app-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section ref={dialogRef} tabIndex={-1} className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-savings-goal-title"><p className="app-eyebrow">Savings goals</p><h2 id="delete-savings-goal-title">Delete {goal.name}?</h2><p>This removes only the goal and its planning progress. Accounts, cash, and transactions will not change.</p>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" onClick={close}>Cancel</button><button className="app-button" type="button" onClick={remove}>Delete goal</button></div></section></div>;
+  const remove = async () => { setBusy(true); if (await save(deleteSavingsGoal(profile, goal.id))) { close(); return; } setError("We couldn’t delete this goal. Check your connection and try again."); setBusy(false); };
+  return <ConfirmationDialog eyebrow="Savings goals" title={`Delete ${goal.name}?`} description="This removes only the goal and its planning progress. Accounts, cash, and transactions will not change." confirmLabel="Delete goal" close={close} confirm={remove} error={error} busy={busy} />;
 }
 
 function SavingsProgressDialog({ goal, close }: { goal: SavingsGoal; close: () => void }) {
@@ -352,7 +315,7 @@ function SavingsProgressDialog({ goal, close }: { goal: SavingsGoal; close: () =
   const [error, setError] = useState("");
   if (!profile) return null;
   const submit = async () => { if (saved < 0 || saved > goal.target) return setError(`Enter an amount between ${formatMoney(0, profile.currency)} and ${formatMoney(goal.target, profile.currency)}.`); if (await save({ ...profile, savingsGoals: profile.savingsGoals.map((item) => item.id === goal.id ? { ...item, saved } : item) })) close(); };
-  return <div className="dialog-backdrop"><section className="confirm-dialog savings-editor" role="dialog" aria-modal="true" aria-labelledby="goal-progress-title"><h2 id="goal-progress-title">Update {goal.name}</h2><p>Change the amount saved toward this goal.</p><label className="form-field">Amount saved<MoneyInput value={saved} onValueChange={setSaved} /></label>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button type="button" className="app-button app-button-secondary" onClick={close}>Cancel</button><button type="button" className="app-button" onClick={submit}>Save progress</button></div></section></div>;
+  return <ModalDialog title={`Update ${goal.name}`} eyebrow="Savings goals" close={close} closeLabel="Close savings progress" className="savings-editor"><p>Change the amount saved toward this goal.</p><label className="form-field">Amount saved<MoneyInput value={saved} onValueChange={(value) => { setSaved(value); setError(""); }} aria-invalid={!!error} /></label>{error && <p className="form-message is-error" role="alert">{error}</p>}<div className="confirm-dialog-actions"><button type="button" className="app-button app-button-secondary" onClick={close}>Cancel</button><button type="button" className="app-button" onClick={submit}>Save progress</button></div></ModalDialog>;
 }
 
 export function InsightsView() {

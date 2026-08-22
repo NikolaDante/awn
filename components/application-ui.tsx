@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export function PageHeader({ title, eyebrow, children }: Readonly<{ title: string; eyebrow?: string; children?: React.ReactNode }>) {
-  return <header className="app-page-header"><div>{eyebrow && <p className="app-eyebrow">{eyebrow}</p>}<h1>{title}</h1></div>{children && <div className="page-actions">{children}</div>}</header>;
+  return <header className="app-page-header"><div>{eyebrow && <p className="app-eyebrow">{eyebrow}</p>}<h1 tabIndex={-1}>{title}</h1></div>{children && <div className="page-actions">{children}</div>}</header>;
 }
 
 export function ComingSoonButton({ children, secondary = false }: Readonly<{ children: React.ReactNode; secondary?: boolean }>) {

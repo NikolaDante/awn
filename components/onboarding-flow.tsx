@@ -7,6 +7,7 @@ import { FinancialItemForm, type FinancialItem, type FinancialItemKind } from "@
 import { useFinancialProfile } from "@/components/financial-provider";
 import { FormField } from "@/components/form-field";
 import { MoneyInput } from "@/components/money-input";
+import { ConfirmationDialog } from "@/components/modal-dialog";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
 import { replaceBudgetSnapshot, replaceOverallBudgetSnapshot } from "@/lib/financial-budget";
 import { formatMoney } from "@/lib/financial-calculations";
@@ -19,6 +20,8 @@ import { currencies, newLocalId, type Account, type CategoryBudget, type CreditC
 const suggestedCategories = ["Housing", "Utilities", "Groceries", "Transport", "Dining", "Shopping", "Health", "Entertainment", "Family", "Other"];
 type Errors = Record<string, string>;
 type ItemEditor = { kind: FinancialItemKind; item?: FinancialItem };
+type PendingRemoval = { title: string; description: string; confirm: () => void };
+type RequestRemoval = (removal: PendingRemoval) => void;
 
 export function OnboardingFlow() {
   const router = useRouter();
@@ -32,6 +35,7 @@ export function OnboardingFlow() {
   const [goalEditor, setGoalEditor] = useState<SavingsGoal | null>();
   const [categoryEditor, setCategoryEditor] = useState<CategoryBudget | null>();
   const [submitting, setSubmitting] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval>();
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -78,7 +82,7 @@ export function OnboardingFlow() {
     const completed = { ...draft, onboarding: { currentStep: 6, completed: true } };
     if (await save(completed)) router.replace("/dashboard"); else setSubmitting(false);
   };
-  const editorOpen = Boolean(itemEditor || goalEditor !== undefined || categoryEditor !== undefined);
+  const editorOpen = Boolean(itemEditor || goalEditor !== undefined || categoryEditor !== undefined || pendingRemoval);
 
   return <main className="onboarding-page">
     <header className="onboarding-header"><Link className="app-wordmark onboarding-brand" href="/" aria-label="Return to AWN homepage"><span className="wordmark-mark" aria-hidden="true">a</span><span>awn</span></Link><span className="onboarding-security">Manual setup · no banking login required</span></header>
@@ -90,13 +94,14 @@ export function OnboardingFlow() {
       {notice && <p className="form-message is-warning" role="status">{notice}</p>}
       {step === 0 && <Welcome />}
       {step === 1 && <BasicsStep draft={draft} change={change} errors={errors} budgetStartDayInput={budgetStartDayInput} setBudgetStartDayInput={setBudgetStartDayInput} />}
-      {step === 2 && <AccountsStep draft={draft} change={change} editor={itemEditor} setEditor={setItemEditor} notice={setNotice} />}
+      {step === 2 && <AccountsStep draft={draft} change={change} editor={itemEditor} setEditor={setItemEditor} notice={setNotice} requestRemoval={setPendingRemoval} />}
       {step === 3 && <HowAwnWorks />}
       {step === 4 && <BudgetStep draft={draft} change={change} error={errors.monthlyBudget} editor={categoryEditor} setEditor={setCategoryEditor} />}
-      {step === 5 && <SavingsStep draft={draft} change={change} editor={goalEditor} setEditor={setGoalEditor} />}
+      {step === 5 && <SavingsStep draft={draft} change={change} editor={goalEditor} setEditor={setGoalEditor} requestRemoval={setPendingRemoval} />}
       {step === 6 && <ReviewStep draft={draft} edit={go} />}
       {!editorOpen && <FlowActions step={step} draft={draft} submitting={submitting} back={() => go(step - 1)} continueStep={continueStep} skip={() => go(step + 1)} complete={complete} />}
     </section>
+    {pendingRemoval && <ConfirmationDialog eyebrow="Setup item" title={pendingRemoval.title} description={pendingRemoval.description} confirmLabel="Remove item" close={() => setPendingRemoval(undefined)} confirm={() => { pendingRemoval.confirm(); setPendingRemoval(undefined); }} />}
   </main>;
 }
 
@@ -137,7 +142,7 @@ function BasicsStep({ draft, change, errors, budgetStartDayInput, setBudgetStart
   return <div className="step-content basics-grid"><FormField label="Country" error={errors.country}><select value={draft.country} onChange={(event) => updateCountry(event.target.value)}>{countries.map((country) => <option key={country}>{country}</option>)}</select></FormField><FormField label="Currency" hint={hasAmounts ? "Existing amounts keep their current base currency." : "Suggested from your country; you can change it."}><select value={draft.currency} disabled={hasAmounts} onChange={(event) => change({ currency: event.target.value as Currency })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></FormField><FormField label="When would you like your monthly budget to start?" error={errors.budgetStartDay} hint="Choose a day from 1 to 28 so every month has a valid start date." className="field-wide"><input type="text" inputMode="numeric" pattern="[0-9]*" value={budgetStartDayInput} onChange={(event) => updateBudgetStartDay(event.target.value)} onBlur={commitBudgetStartDay} /></FormField><aside className="onboarding-info field-wide"><strong>Budget around your real month.</strong>{previewDay ? <p>Some people budget from the 1st. Others start on payday. With day {previewDay}, your current cycle is {formatBudgetCycle(previewDay)}.</p> : <p>Some people budget from the 1st. Others start on payday. Enter a day from 1 to 28 to preview your current cycle.</p>}</aside></div>;
 }
 
-function AccountsStep({ draft, change, editor, setEditor, notice }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; editor?: ItemEditor; setEditor: (editor?: ItemEditor) => void; notice: (message: string) => void }) {
+function AccountsStep({ draft, change, editor, setEditor, notice, requestRemoval }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; editor?: ItemEditor; setEditor: (editor?: ItemEditor) => void; notice: (message: string) => void; requestRemoval: RequestRemoval }) {
   const debitCards = draft.debitCards ?? [];
   const persist = (item: FinancialItem) => {
     if (editor?.kind === "account") change({ accounts: upsertOnboardingItem(draft.accounts, item as Account) });
@@ -148,11 +153,12 @@ function AccountsStep({ draft, change, editor, setEditor, notice }: { draft: Fin
   const removeAccount = (account: Account) => {
     if (hasLinkedAccountActivity(draft, account.id)) return notice(removalGuardMessage("account"));
     if (debitCards.some((card) => card.linkedAccountId === account.id)) return notice("Remove or unlink this account’s debit card first.");
-    change({ accounts: removeOnboardingItem(draft.accounts, account.id) });
+    requestRemoval({ title: `Remove ${account.name}?`, description: "This removes the saved account details and starting balance from your setup.", confirm: () => change({ accounts: removeOnboardingItem(draft.accounts, account.id) }) });
   };
-  const removeCredit = (card: CreditCard) => hasLinkedCardActivity(draft, card.id) ? notice(removalGuardMessage("credit-card")) : change({ creditCards: removeOnboardingItem(draft.creditCards, card.id) });
+  const removeDebit = (card: DebitCard) => requestRemoval({ title: `Remove ${card.name}?`, description: "This removes the saved debit card details from your setup.", confirm: () => change({ debitCards: removeOnboardingItem(debitCards, card.id) }) });
+  const removeCredit = (card: CreditCard) => hasLinkedCardActivity(draft, card.id) ? notice(removalGuardMessage("credit-card")) : requestRemoval({ title: `Remove ${card.name}?`, description: "This removes the saved credit card details and opening balance from your setup.", confirm: () => change({ creditCards: removeOnboardingItem(draft.creditCards, card.id) }) });
   if (editor) return <div className="step-content"><div className="inline-editor-heading"><p className="app-eyebrow">{editor.item ? "Edit" : "Add"} {editor.kind === "account" ? "account" : `${editor.kind} card`}</p><h2>{editor.item ? editor.item.name : "Add manual details"}</h2></div><FinancialItemForm kind={editor.kind} existing={editor.item} profile={draft} onCancel={() => setEditor(undefined)} onSave={persist} /></div>;
-  return <div className="step-content"><div className="onboarding-add-grid"><button type="button" onClick={() => setEditor({ kind: "account" })}>+ Add account</button><button type="button" onClick={() => setEditor({ kind: "debit" })}>+ Add debit card</button><button type="button" onClick={() => setEditor({ kind: "credit" })}>+ Add credit card</button></div><aside className="onboarding-info"><strong>Automatic bank linking is coming soon.</strong><p>For now, add your accounts and cards manually. AWN only needs the details required to build your financial overview.</p></aside><SummaryGroup title="Accounts" empty="No accounts added yet.">{draft.accounts.map((account) => <SummaryRow key={account.id} title={account.name} detail={`${account.type} · ${formatMoney(account.balance, account.currency ?? draft.currency)}${account.lastFour ? ` · •••• ${account.lastFour}` : ""}`} edit={() => setEditor({ kind: "account", item: account })} remove={() => removeAccount(account)} />)}</SummaryGroup><SummaryGroup title="Debit cards" empty="No debit cards added yet.">{debitCards.map((card) => <SummaryRow key={card.id} title={card.name} detail={`${card.purpose || "Debit card"}${card.lastFour ? ` · •••• ${card.lastFour}` : ""}${card.linkedAccountId ? ` · Linked to ${draft.accounts.find((account) => account.id === card.linkedAccountId)?.name ?? "account"}` : " · Not linked"}`} edit={() => setEditor({ kind: "debit", item: card })} remove={() => change({ debitCards: removeOnboardingItem(debitCards, card.id) })} />)}</SummaryGroup><SummaryGroup title="Credit cards" empty="No credit cards added yet.">{draft.creditCards.map((card) => <SummaryRow key={card.id} title={card.name} detail={`${formatMoney(card.owed, card.currency ?? draft.currency)} owed${card.lastFour ? ` · •••• ${card.lastFour}` : ""}`} edit={() => setEditor({ kind: "credit", item: card })} remove={() => removeCredit(card)} />)}</SummaryGroup><div className="cash-concept"><span>Cash</span><p>Cash starts at {formatMoney(draft.cashBalance ?? 0, draft.currency)}. You can edit its balance later in Cards &amp; Accounts and use it in transactions.</p></div></div>;
+  return <div className="step-content"><div className="onboarding-add-grid"><button type="button" onClick={() => setEditor({ kind: "account" })}>+ Add account</button><button type="button" onClick={() => setEditor({ kind: "debit" })}>+ Add debit card</button><button type="button" onClick={() => setEditor({ kind: "credit" })}>+ Add credit card</button></div><aside className="onboarding-info"><strong>Automatic bank linking is coming soon.</strong><p>For now, add your accounts and cards manually. AWN only needs the details required to build your financial overview.</p></aside><SummaryGroup title="Accounts" empty="No accounts added yet.">{draft.accounts.map((account) => <SummaryRow key={account.id} title={account.name} detail={`${account.type} · ${formatMoney(account.balance, account.currency ?? draft.currency)}${account.lastFour ? ` · •••• ${account.lastFour}` : ""}`} edit={() => setEditor({ kind: "account", item: account })} remove={() => removeAccount(account)} />)}</SummaryGroup><SummaryGroup title="Debit cards" empty="No debit cards added yet.">{debitCards.map((card) => <SummaryRow key={card.id} title={card.name} detail={`${card.purpose || "Debit card"}${card.lastFour ? ` · •••• ${card.lastFour}` : ""}${card.linkedAccountId ? ` · Linked to ${draft.accounts.find((account) => account.id === card.linkedAccountId)?.name ?? "account"}` : " · Not linked"}`} edit={() => setEditor({ kind: "debit", item: card })} remove={() => removeDebit(card)} />)}</SummaryGroup><SummaryGroup title="Credit cards" empty="No credit cards added yet.">{draft.creditCards.map((card) => <SummaryRow key={card.id} title={card.name} detail={`${formatMoney(card.owed, card.currency ?? draft.currency)} owed${card.lastFour ? ` · •••• ${card.lastFour}` : ""}`} edit={() => setEditor({ kind: "credit", item: card })} remove={() => removeCredit(card)} />)}</SummaryGroup><div className="cash-concept"><span>Cash</span><p>Cash starts at {formatMoney(draft.cashBalance ?? 0, draft.currency)}. You can edit its balance later in Cards &amp; Accounts and use it in transactions.</p></div></div>;
 }
 
 function HowAwnWorks() {
@@ -184,10 +190,10 @@ function CategoryBudgetForm({ existing, categories, onCancel, onSave }: { existi
   return <div className="inline-form"><div className="field-row"><FormField label="Category" error={errors.name}><select value={name} onChange={(event) => setName(event.target.value)}>{suggestedCategories.map((category) => <option key={category}>{category}</option>)}</select></FormField><FormField label="Monthly limit" error={errors.limit}><MoneyInput value={limit} onValueChange={setLimit} placeholder="0.00" /></FormField></div><div className="confirm-dialog-actions"><button type="button" className="app-button app-button-secondary" onClick={onCancel}>Cancel</button><button type="button" className="app-button" onClick={submit}>{existing ? "Save changes" : "Add category"}</button></div></div>;
 }
 
-function SavingsStep({ draft, change, editor, setEditor }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; editor: SavingsGoal | null | undefined; setEditor: (editor: SavingsGoal | null | undefined) => void }) {
+function SavingsStep({ draft, change, editor, setEditor, requestRemoval }: { draft: FinancialProfile; change: (patch: Partial<FinancialProfile>) => void; editor: SavingsGoal | null | undefined; setEditor: (editor: SavingsGoal | null | undefined) => void; requestRemoval: RequestRemoval }) {
   const persist = (goal: SavingsGoal) => { change({ savingsGoals: upsertOnboardingItem(draft.savingsGoals, goal) }); setEditor(undefined); };
   if (editor !== undefined) return <div className="step-content"><SavingsGoalForm profile={draft} existing={editor ?? undefined} onCancel={() => setEditor(undefined)} onSave={persist} /></div>;
-  return <div className="step-content"><div className="editor-heading"><h2>Savings goals <small>Optional</small></h2><button type="button" className="text-button" onClick={() => setEditor(null)}>+ Add savings goal</button></div><SummaryGroup empty="No savings goals yet. You can add one whenever it feels useful.">{[...draft.savingsGoals].sort((a, b) => a.priority - b.priority).map((goal) => <SummaryRow key={goal.id} title={goal.name} detail={`${formatMoney(goal.saved, draft.currency)} of ${formatMoney(goal.target, draft.currency)} · ${formatMoney(goal.contribution, draft.currency)}/month · ${formatTargetMonth(goal.targetDate)} · Priority ${goal.priority}`} edit={() => setEditor(goal)} remove={() => change({ savingsGoals: removeOnboardingItem(draft.savingsGoals, goal.id) })} />)}</SummaryGroup></div>;
+  return <div className="step-content"><div className="editor-heading"><h2>Savings goals <small>Optional</small></h2><button type="button" className="text-button" onClick={() => setEditor(null)}>+ Add savings goal</button></div><SummaryGroup empty="No savings goals yet. You can add one whenever it feels useful.">{[...draft.savingsGoals].sort((a, b) => a.priority - b.priority).map((goal) => <SummaryRow key={goal.id} title={goal.name} detail={`${formatMoney(goal.saved, draft.currency)} of ${formatMoney(goal.target, draft.currency)} · ${formatMoney(goal.contribution, draft.currency)}/month · ${formatTargetMonth(goal.targetDate)} · Priority ${goal.priority}`} edit={() => setEditor(goal)} remove={() => requestRemoval({ title: `Remove ${goal.name}?`, description: "This removes the saved goal and its planning progress from your setup.", confirm: () => change({ savingsGoals: removeOnboardingItem(draft.savingsGoals, goal.id) }) })} />)}</SummaryGroup></div>;
 }
 
 function ReviewStep({ draft, edit }: { draft: FinancialProfile; edit: (step: number) => void }) {

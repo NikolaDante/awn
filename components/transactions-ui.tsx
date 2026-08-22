@@ -6,6 +6,7 @@ import { AnimatedMoney } from "@/components/animated-money";
 import { AppIcon } from "@/components/app-icons";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { MoneyInput } from "@/components/money-input";
+import { ConfirmationDialog } from "@/components/modal-dialog";
 import { useModalDialog } from "@/components/use-modal-dialog";
 import { budgetCategoriesForMonth, budgetSummary, categoryBudgetPosition } from "@/lib/financial-budget";
 import { calculateActualSummary, formatMoney, isValidDate } from "@/lib/financial-calculations";
@@ -77,11 +78,12 @@ export function AddTransactionButton() {
 }
 
 export function TransactionsView() {
-  const { profile, ready, save } = useFinancialProfile();
+  const { profile, ready } = useFinancialProfile();
   const [editing, setEditing] = useState<Transaction>();
   const [form, setForm] = useState(false);
   const [allOpen, setAllOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [deleting, setDeleting] = useState<Transaction>();
   if (!ready) return <p className="loading-copy">Loading your activity...</p>;
   if (!profile) return <p className="loading-copy">Start your plan before adding activity.</p>;
   const month = financialReferenceMonth(profile);
@@ -95,12 +97,28 @@ export function TransactionsView() {
   const topCategory = categories[0]?.spent ? categories[0].name : "No spending yet";
   const recentExpenses = currentMonthTransactions.filter((item) => item.type === "expense").slice(0, 8);
   const budget = budgetSummary(profile, month, actual.expenses);
-  const remove = async (item: Transaction) => { if (!window.confirm("Delete this transaction? Its full financial effect will be reversed.")) return; const result = mutateLedger(profile, { kind: "delete", id: item.id }); if (result.ok) await save(result.profile); else window.alert(result.error); };
-  return <>{form && <TransactionForm editing={editing} close={() => { setForm(false); setEditing(undefined); }} />}{allOpen && <AllTransactionsDialog close={() => setAllOpen(false)} transactions={currentMonthTransactions} profile={profile} readOnly={false} edit={(item) => { setAllOpen(false); setEditing(item); setForm(true); }} remove={remove} />}{categoriesOpen && <AllCategoriesDialog close={() => setCategoriesOpen(false)} categories={categories} profile={profile} />}
+  return <>{form && <TransactionForm editing={editing} close={() => { setForm(false); setEditing(undefined); }} />}{allOpen && <AllTransactionsDialog close={() => setAllOpen(false)} transactions={currentMonthTransactions} profile={profile} readOnly={false} edit={(item) => { setAllOpen(false); setEditing(item); setForm(true); }} remove={setDeleting} />}{deleting && <TransactionDeleteDialog transaction={deleting} close={() => setDeleting(undefined)} />}{categoriesOpen && <AllCategoriesDialog close={() => setCategoriesOpen(false)} categories={categories} profile={profile} />}
     <section className="transactions-hero" aria-label={`${period.label} financial position`}><div className="transactions-hero-main"><div className="transactions-hero-heading"><div><p className="app-eyebrow">Current financial position</p><span>{period.label}</span></div><span className={`status-pill is-${budget.tone}`}>{budget.statusLabel}</span></div><AnimatedMoney className="transactions-hero-value" value={actual.currentPosition} currency={profile.currency} /><div className="transactions-hero-details"><span>Opening position<strong>{formatMoney(actual.openingPosition, profile.currency)}</strong></span><span>Budget<strong>{budget.budget === null ? "No budget" : formatMoney(budget.budget, profile.currency)}</strong></span><span>Budget difference<strong className={budget.kind === "over" ? "negative" : budget.kind === "none" ? "neutral" : "positive"}>{budget.remaining === null ? "Not available" : formatMoney(Math.abs(budget.remaining), profile.currency)}</strong></span></div></div><div className="transactions-hero-summaries" aria-label="Budget-period totals"><TransactionHeroSummary kind="income" label="Period income" helper="Cash coming in" value={formatMoney(actual.income, profile.currency)} /><TransactionHeroSummary kind="expense" label="Period expenses" helper="Cash going out" value={formatMoney(actual.expenses, profile.currency)} /></div></section>
     <section className="metric-grid transaction-metrics" aria-label="Current budget-period transaction summary"><TransactionMetric label="Average expense" value={formatMoney(actual.averageExpense, profile.currency)} detail="Average value per expense" icon="transactions" /><TransactionMetric label="Top spending category" value={topCategory} detail={categories[0]?.spent ? `${formatMoney(categories[0].spent, profile.currency)} spent` : "No expenses recorded"} icon="wallet" /></section>
     <section className="transactions-detail-grid"><div className="content-panel action-card recent-expenses-panel"><div className="panel-heading"><div><p className="app-eyebrow">Recent expenses</p><h2>Latest spending</h2></div><button className="text-button" type="button" onClick={() => setAllOpen(true)}>View all <AppIcon name="arrow" /></button></div>{recentExpenses.length ? <div className="transaction-list compact-transaction-list">{recentExpenses.map((item) => <TransactionListRow key={item.id} item={item} profile={profile} />)}</div> : <section className="empty-panel transactions-empty-panel"><span className="empty-panel-mark" aria-hidden="true">+</span><h2>No expenses yet this period.</h2><p>Add your first expense when you&apos;re ready.</p><button className="app-button" type="button" onClick={() => setForm(true)}><AppIcon name="plus" />Add transaction</button></section>}</div><div className="content-panel action-card category-panel"><div className="panel-heading"><div><p className="app-eyebrow">Category budgets</p><h2>This period</h2></div><button className="text-button" type="button" onClick={() => setCategoriesOpen(true)}>View all <AppIcon name="arrow" /></button></div>{topCategories.length ? <CategoryBudgetList categories={topCategories} profile={profile} /> : <section className="empty-panel transactions-empty-panel"><span className="empty-panel-mark" aria-hidden="true">+</span><h2>No category spending</h2><p>Add an expense to see category budget progress.</p></section>}</div></section>
   </>;
+}
+
+export function TransactionDeleteDialog({ transaction, close, afterDelete }: { transaction: Transaction; close: () => void; afterDelete?: () => void }) {
+  const { profile, save } = useFinancialProfile();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!profile) return null;
+  const remove = async () => {
+    setBusy(true);
+    setError("");
+    const result = mutateLedger(profile, { kind: "delete", id: transaction.id });
+    if (!result.ok) { setError(result.error); setBusy(false); return; }
+    if (await save(result.profile)) { close(); afterDelete?.(); return; }
+    setError("We couldn’t delete this transaction. Check your connection and try again.");
+    setBusy(false);
+  };
+  return <ConfirmationDialog eyebrow="Transaction" title="Delete transaction?" description="This will reverse the transaction's financial effect and remove it from your history." confirmLabel="Delete transaction" close={close} confirm={remove} error={error} busy={busy} />;
 }
 
 function TransactionMetric({ label, value, detail, icon }: { label: string; value: string; detail: string; icon: "transactions" | "wallet" }) { return <article className="metric-card"><span className="metric-heading"><AppIcon name={icon} />{label}</span><strong>{value}</strong><small>{detail}</small></article>; }

@@ -20,6 +20,8 @@ test("first login routes incomplete profiles into onboarding and leaves complete
   assert.equal(authenticatedFinancialRoute(incomplete, "/onboarding"), null);
   incomplete.onboarding.completed = true;
   assert.equal(authenticatedFinancialRoute(incomplete, "/dashboard"), null);
+  assert.equal(authenticatedFinancialRoute(incomplete, "/onboarding"), "/dashboard");
+  assert.equal(authenticatedFinancialRoute(incomplete, "/onboarding", true), null);
 });
 
 test("stored and linked onboarding steps resume without changing entered profile data", () => {

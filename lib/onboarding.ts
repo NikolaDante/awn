@@ -14,9 +14,14 @@ export function requestedOnboardingStep(value: string | null, storedStep: number
   return Number.isInteger(storedStep) && storedStep >= 0 && storedStep <= 6 ? storedStep : 0;
 }
 
-export function authenticatedFinancialRoute(profile: FinancialProfile | null, pathname: string) {
-  if (pathname === "/onboarding") return null;
-  return !profile?.onboarding.completed ? "/onboarding" : null;
+export function authenticatedFinancialRoute(profile: FinancialProfile | null, pathname: string, completedOnboardingEdit = false) {
+  if (!profile?.onboarding.completed) return pathname === "/onboarding" ? null : "/onboarding";
+  if (pathname === "/onboarding" && !completedOnboardingEdit) return "/dashboard";
+  return null;
+}
+
+export function authenticatedHomeRoute(profile: FinancialProfile | null) {
+  return profile?.onboarding.completed ? "/dashboard" : "/onboarding";
 }
 
 export function effectiveMonthlyBudget(profile: FinancialProfile, month = financialReferenceMonth(profile)) {
