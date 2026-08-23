@@ -8,6 +8,15 @@
 .auth-card h1 { margin: 0; color: var(--awn-surface); font-size: clamp(2rem, 7vw, 2.75rem); line-height: 1.04; }
 .auth-intro { margin: .75rem 0 1.25rem; color: rgba(255,255,255,.7); line-height: 1.6; }
 .auth-card .form-message { margin: 0 0 1rem; }
+.social-auth-actions { display: grid; gap: .7rem; }
+.social-auth-button { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 46px; padding: 10px 16px; border-radius: var(--radius-pill); font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; transition: border-color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast); }
+.social-auth-button.is-google { border: 1px solid rgba(255,255,255,.22); background: #fff; color: #17191c; box-shadow: 0 12px 28px rgba(0,0,0,.13); }
+.social-auth-button.is-apple { border: 1px solid rgba(255,255,255,.38); background: #050607; color: #fff; box-shadow: 0 12px 28px rgba(0,0,0,.18); }
+.social-auth-button:hover:not(:disabled) { border-color: rgba(185,180,255,.62); box-shadow: 0 14px 32px rgba(0,0,0,.2); }
+.social-auth-button:focus-visible { outline: 0; box-shadow: 0 0 0 4px rgba(185,180,255,.28); }
+.social-auth-button:disabled { cursor: not-allowed; opacity: .72; }
+.auth-divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .8rem; margin: 1rem 0; color: rgba(255,255,255,.48); font-size: .75rem; }
+.auth-divider::before,.auth-divider::after { content: ""; height: 1px; background: rgba(255,255,255,.13); }
 .auth-form { display: grid; gap: 1rem; }
 .auth-form label { display: grid; gap: .5rem; color: rgba(255,255,255,.86); font-size: .9rem; font-weight: 650; }
 .auth-form .form-field { min-height: auto; border: 0; background: transparent; color: var(--awn-surface); }

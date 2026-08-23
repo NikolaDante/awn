@@ -8,6 +8,7 @@ Supabase is AWN’s authoritative financial persistence layer. The browser uses 
 2. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Keep `.env.local` untracked.
 3. Configure Supabase Auth with the local and deployed callback/recovery URLs described in `docs/PREVIEW-DEPLOYMENT.md`.
 4. Enable email/password authentication and verify sign-up, confirmation, sign-in, sign-out, and recovery with a controlled test address.
+5. For Google or Apple login, follow `docs/AUTH-OPERATIONS.md`; provider secrets remain in Supabase Auth, never in AWN or Vercel public variables.
 
 ## Household ownership model
 

@@ -6,8 +6,11 @@ Vercel Preview requires:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_AUTH_GOOGLE_ENABLED=true` only after Google is enabled in Supabase
+- `NEXT_PUBLIC_AUTH_APPLE_ENABLED=true` only after Apple is enabled in Supabase
 
-Set both for the Preview environment. Do not commit their values or add a service-role key to any browser-visible variable.
+Set both Supabase variables for the Preview environment. Do not commit their values or add a service-role key to any browser-visible variable.
+The social-auth flags are public readiness switches, not provider credentials. Leave a flag false or unset until its Supabase provider and redirect URLs are ready so AWN never displays a knowingly broken button.
 
 ## Supabase Auth URLs
 
