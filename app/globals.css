@@ -1644,6 +1644,442 @@
   }
 }
 
+/* Mobile UX v1: keep the established shell while moving primary actions within thumb reach. */
+.app-mobile-action-bar {
+  display:none;
+}
+
+.mobile-add-sheet {
+  width:min(100%,480px);
+}
+
+.mobile-add-options {
+  display:grid!important;
+  gap:10px!important;
+  margin:0!important;
+}
+
+.mobile-add-options > button {
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) 18px;
+  align-items:center;
+  gap:13px;
+  width:100%;
+  min-height:76px;
+  padding:13px 14px;
+  border:1px solid var(--awn-border);
+  border-radius:18px;
+  background:#fff;
+  color:var(--awn-ink);
+  font:inherit;
+  text-align:left;
+}
+
+.mobile-add-options > button:focus-visible {
+  outline:0;
+  border-color:var(--awn-violet);
+  box-shadow:0 0 0 4px rgba(102,92,246,.12);
+}
+
+.mobile-add-options > button > span:nth-child(2) {
+  display:grid;
+  gap:4px;
+}
+
+.mobile-add-options strong,
+.mobile-add-options small {
+  display:block;
+}
+
+.mobile-add-options strong {
+  font-size:.91rem;
+}
+
+.mobile-add-options small {
+  color:var(--awn-muted);
+  font-size:.74rem;
+  line-height:1.4;
+}
+
+.mobile-add-option-icon {
+  display:grid;
+  place-items:center;
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  background:var(--awn-violet-light);
+  color:var(--awn-violet);
+}
+
+.mobile-add-option-icon svg,
+.mobile-add-options > button > svg {
+  width:18px;
+  height:18px;
+}
+
+.mobile-add-options > button > svg {
+  color:var(--awn-muted);
+}
+
+/* Preserve the unified desktop hero after separating mobile period KPIs semantically. */
+.transactions-overview {
+  display:grid;
+  grid-template-columns:minmax(0,74fr) minmax(220px,26fr);
+  gap:28px;
+  overflow:hidden;
+  min-height:248px;
+  border:1px solid rgba(255,255,255,.28);
+  border-radius:var(--awn-card-radius);
+  background:
+    radial-gradient(circle at 82% 12%, rgba(255,255,255,.2), transparent 18rem),
+    linear-gradient(135deg,#171b22 0%,#2e2864 54%,var(--awn-violet) 130%);
+  color:#fff;
+  box-shadow:0 30px 80px rgba(16,20,24,.2);
+}
+
+.transactions-overview > .transactions-hero {
+  grid-template-columns:1fr;
+  min-height:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+
+.transactions-overview > .transactions-hero::before,
+.transactions-overview > .transactions-hero::after {
+  display:none;
+}
+
+.transactions-period-kpis {
+  display:grid;
+  grid-template-rows:repeat(2,minmax(0,1fr));
+  gap:6px;
+  padding:24px 28px 24px 0;
+}
+
+.sms-import-stage {
+  display:flex!important;
+  min-height:0;
+  flex-direction:column;
+  justify-content:initial!important;
+  gap:0!important;
+  margin:0!important;
+}
+
+.sms-import-stage-body {
+  min-height:0;
+}
+
+.sms-import-stage-body > .sms-import-intro {
+  display:grid;
+  gap:6px;
+  margin-bottom:12px;
+  color:var(--awn-muted);
+  line-height:1.55;
+}
+
+.sms-import-stage-body > .sms-import-summary {
+  display:grid;
+  grid-template-columns:minmax(190px,1.6fr) repeat(4,minmax(90px,1fr));
+  align-items:center;
+  gap:10px;
+  margin:0 0 16px;
+  padding:16px;
+  border:1px solid var(--awn-border);
+  border-radius:20px;
+  background:var(--awn-stone);
+}
+
+.sms-import-stage-body > .sms-proposal-list {
+  display:grid;
+  gap:12px;
+  margin:18px 0;
+}
+
+.sms-import-footer {
+  flex:none;
+}
+
+@media (max-width:900px) and (min-width:641px) {
+  .transactions-overview {
+    grid-template-columns:1fr;
+  }
+
+  .transactions-period-kpis {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:auto;
+    padding:0 28px 24px;
+  }
+}
+
+@media (max-width:640px) {
+  .app-mobile-header {
+    justify-content:flex-start;
+    height:56px;
+    padding-inline:16px;
+  }
+
+  .app-mobile-header .mobile-menu-button {
+    display:none;
+  }
+
+  .app-mobile-header .app-wordmark {
+    min-height:40px;
+  }
+
+  .app-shell .app-workspace,
+  .app-shell:has(.dashboard-page) .app-workspace,
+  .app-shell:has(.transactions-page) .app-workspace,
+  .app-shell:has(.history-page) .app-workspace,
+  .app-shell:has(.cards-accounts-page) .app-workspace,
+  .app-shell:has(.plan-page) .app-workspace,
+  .app-shell:has(.insights-page) .app-workspace {
+    padding-bottom:calc(118px + env(safe-area-inset-bottom));
+  }
+
+  .app-shell .app-page-header .page-actions {
+    display:none;
+  }
+
+  .app-mobile-action-bar {
+    position:fixed;
+    z-index:24;
+    right:12px;
+    bottom:calc(10px + env(safe-area-inset-bottom));
+    left:12px;
+    display:grid;
+    grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);
+    gap:8px;
+    max-width:420px;
+    margin-inline:auto;
+    padding:7px;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:22px;
+    background:rgba(20,24,29,.94);
+    box-shadow:0 18px 48px rgba(16,20,24,.3);
+    backdrop-filter:blur(18px);
+    transition:opacity var(--motion-fast), transform var(--motion-fast);
+  }
+
+  .app-mobile-action-bar button {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    min-height:50px;
+    padding:8px 14px;
+    border:0;
+    border-radius:16px;
+    font:inherit;
+    font-size:.82rem;
+    font-weight:700;
+  }
+
+  .app-mobile-action-bar svg {
+    width:18px;
+    height:18px;
+  }
+
+  .mobile-action-primary {
+    background:var(--awn-violet);
+    color:#fff;
+  }
+
+  .mobile-action-secondary {
+    background:rgba(255,255,255,.09);
+    color:#fff;
+  }
+
+  .app-mobile-action-bar button:focus-visible {
+    outline:2px solid #d9d6ff;
+    outline-offset:2px;
+  }
+
+  body:has(.app-dialog-backdrop) .app-mobile-action-bar {
+    pointer-events:none;
+    opacity:0;
+    transform:translateY(12px);
+  }
+
+  .dialog-backdrop.app-dialog-backdrop,
+  .transactions-page .dialog-backdrop.app-dialog-backdrop {
+    align-items:end;
+    padding:12px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .confirm-dialog.mobile-add-sheet,
+  .confirm-dialog.transaction-form,
+  .confirm-dialog.bank-sms-dialog {
+    width:100%;
+    max-height:min(92svh,820px);
+    border-radius:26px;
+  }
+
+  .confirm-dialog.mobile-add-sheet {
+    padding:22px 18px 18px;
+  }
+
+  .confirm-dialog.mobile-add-sheet > .repeat-card-heading {
+    margin-bottom:14px;
+  }
+
+  .transaction-form > .transaction-type {
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+
+  .transaction-form > .transaction-form-body {
+    overscroll-behavior:contain;
+  }
+
+  .transaction-form > .confirm-dialog-actions,
+  .sms-import-footer {
+    position:sticky;
+    bottom:0;
+    z-index:2;
+    margin-top:14px;
+    border-top:1px solid var(--awn-border);
+    background:#fff;
+  }
+
+  .confirm-dialog.bank-sms-dialog {
+    display:flex;
+    flex-direction:column;
+    padding:0;
+    overflow:hidden;
+  }
+
+  .bank-sms-dialog > .repeat-card-heading {
+    flex:none;
+    margin:0;
+    padding:22px 18px 14px;
+  }
+
+  .bank-sms-dialog > .sms-import-stage {
+    flex:1;
+    overflow:hidden;
+  }
+
+  .sms-import-stage-body {
+    padding:0 18px;
+    overflow-x:hidden;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+
+  .sms-import-footer {
+    display:flex;
+    flex-direction:column-reverse;
+    gap:8px;
+    margin:0!important;
+    padding:14px 18px 18px;
+  }
+
+  .sms-import-footer .app-button {
+    width:100%;
+  }
+
+  .sms-import-textarea {
+    min-height:220px;
+    max-height:240px;
+  }
+
+  .sms-import-stage-body > .sms-import-summary {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    padding:14px;
+  }
+
+  .sms-import-summary > strong {
+    grid-column:1 / -1;
+  }
+
+  .sms-proposal-main {
+    flex-direction:column;
+    gap:10px;
+  }
+
+  .sms-proposal-main .status-pill {
+    align-self:flex-start;
+  }
+
+  .sms-import-editor {
+    grid-template-columns:1fr;
+  }
+
+  .sms-import-note {
+    grid-column:auto;
+  }
+
+  .transactions-overview {
+    display:block;
+    min-height:0;
+    overflow:visible;
+    border:0;
+    background:transparent;
+    box-shadow:none;
+  }
+
+  .transactions-overview > .transactions-hero {
+    min-height:0;
+    padding:20px 18px;
+    border:1px solid rgba(255,255,255,.28);
+    border-radius:var(--awn-card-radius);
+    background:
+      radial-gradient(circle at 82% 12%, rgba(255,255,255,.2), transparent 18rem),
+      linear-gradient(135deg,#171b22 0%,#2e2864 54%,var(--awn-violet) 130%);
+    box-shadow:0 22px 56px rgba(16,20,24,.17);
+  }
+
+  .transactions-overview .transactions-hero-value {
+    margin:16px 0 18px;
+    font-size:2.1rem;
+    white-space:normal;
+  }
+
+  .transactions-overview .transactions-hero-details {
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;
+    padding-top:12px;
+  }
+
+  .transactions-overview .transactions-hero-details span {
+    font-size:.64rem;
+  }
+
+  .transactions-overview .transactions-hero-details strong {
+    font-size:.75rem;
+    overflow-wrap:anywhere;
+  }
+
+  .transactions-period-kpis {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:auto;
+    gap:10px;
+    padding:10px 0 0;
+  }
+
+  .transactions-period-kpis .transactions-hero-summary {
+    min-height:112px;
+    padding:14px;
+    border:1px solid var(--awn-border);
+    background:#fff;
+    color:var(--awn-ink);
+    box-shadow:var(--shadow-soft);
+  }
+
+  .transactions-period-kpis .transactions-hero-summary > span,
+  .transactions-period-kpis .transactions-hero-summary small {
+    color:var(--awn-muted);
+  }
+
+  .transactions-period-kpis .transactions-hero-summary strong {
+    color:var(--awn-ink);
+    font-size:1.02rem;
+    white-space:normal;
+  }
+}
+
 /* Bank SMS import extends the existing AWN modal language without a parallel surface. */
 .confirm-dialog.bank-sms-dialog {
   width:min(960px,calc(100vw - 32px));
@@ -6264,5 +6700,67 @@
   .onboarding-card {
     padding:26px 20px;
     border-radius:26px;
+  }
+}
+
+/* Mobile UX v1: final rules must follow legacy responsive declarations. */
+@media (max-width:640px) {
+  .app-mobile-header {
+    justify-content:flex-start;
+    height:56px;
+    padding-inline:16px;
+  }
+
+  .app-mobile-header .mobile-menu-button,
+  .app-shell .app-page-header .page-actions {
+    display:none;
+  }
+
+  .app-shell .app-workspace,
+  .app-shell:has(.dashboard-page) .app-workspace,
+  .app-shell:has(.transactions-page) .app-workspace,
+  .app-shell:has(.history-page) .app-workspace,
+  .app-shell:has(.cards-accounts-page) .app-workspace,
+  .app-shell:has(.plan-page) .app-workspace,
+  .app-shell:has(.insights-page) .app-workspace {
+    padding-bottom:calc(118px + env(safe-area-inset-bottom));
+  }
+
+  .dialog-backdrop.app-dialog-backdrop,
+  .transactions-page .dialog-backdrop.app-dialog-backdrop {
+    align-items:end;
+    padding:12px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .confirm-dialog.mobile-add-sheet,
+  .confirm-dialog.transaction-form,
+  .confirm-dialog.bank-sms-dialog {
+    width:100%;
+    max-height:min(92svh,820px);
+    border-radius:26px;
+  }
+
+  .transaction-form > .transaction-type {
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+
+  .transactions-overview {
+    display:block;
+    min-height:0;
+    overflow:visible;
+    border:0;
+    background:transparent;
+    box-shadow:none;
+  }
+
+  .transactions-overview > .transactions-hero {
+    min-height:0;
+    padding:20px 18px;
+    border:1px solid rgba(255,255,255,.28);
+    border-radius:var(--awn-card-radius);
+    background:
+      radial-gradient(circle at 82% 12%, rgba(255,255,255,.2), transparent 18rem),
+      linear-gradient(135deg,#171b22 0%,#2e2864 54%,var(--awn-violet) 130%);
+    box-shadow:0 22px 56px rgba(16,20,24,.17);
   }
 }
