@@ -1657,7 +1657,7 @@
   width:min(100%,480px);
 }
 
-.mobile-add-options {
+.confirm-dialog > .mobile-add-options {
   display:grid!important;
   grid-template-columns:minmax(0,1fr);
   justify-content:stretch;
