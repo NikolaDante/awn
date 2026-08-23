@@ -1669,7 +1669,7 @@
   align-items:center;
   gap:13px;
   width:100%;
-  min-height:76px;
+  height:76px;
   padding:13px 14px;
   border:1px solid var(--awn-border);
   border-radius:18px;
@@ -1682,12 +1682,13 @@
 .mobile-add-options > button:focus-visible {
   outline:0;
   border-color:var(--awn-violet);
-  box-shadow:0 0 0 4px rgba(102,92,246,.12);
+  box-shadow:0 0 0 3px rgba(102,92,246,.12),inset 0 0 0 1px rgba(102,92,246,.14);
 }
 
 .mobile-add-options > button > span:nth-child(2) {
   display:grid;
   gap:4px;
+  min-width:0;
 }
 
 .mobile-add-options strong,
@@ -1707,6 +1708,7 @@
 
 .mobile-add-option-icon {
   display:grid;
+  flex:none;
   place-items:center;
   width:42px;
   height:42px;
@@ -1723,6 +1725,7 @@
 
 .mobile-add-options > button > svg {
   color:var(--awn-muted);
+  justify-self:center;
 }
 
 /* Preserve the unified desktop hero after separating mobile period KPIs semantically. */
@@ -6804,7 +6807,7 @@
     width:auto;
     max-width:420px;
     margin-inline:auto;
-    padding:10px;
+    padding:12px;
     border:1px solid rgba(255,255,255,.14);
     border-radius:24px;
     background:rgba(16,20,24,.96);
@@ -6818,19 +6821,39 @@
 
   .mobile-navigation-list {
     display:grid;
-    gap:4px;
+    gap:2px;
   }
 
   .mobile-navigation-card .app-nav-link {
+    display:grid;
+    grid-template-columns:24px minmax(0,1fr);
+    align-items:center;
+    justify-content:start;
+    gap:12px;
+    height:48px;
     min-height:48px;
-    padding:10px 12px;
+    padding:0 12px;
     border-radius:14px;
     color:rgba(255,255,255,.68);
+    font-size:.9rem;
+    line-height:1.1;
+    text-align:left;
   }
 
   .mobile-navigation-card .app-nav-link > span:first-child {
-    width:20px;
+    display:grid;
+    width:24px;
+    height:24px;
+    place-items:center;
     color:#a9a4ff;
+  }
+
+  .mobile-navigation-card .app-nav-link > span:last-child {
+    display:block;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
   }
 
   .mobile-navigation-card .app-nav-link.is-active {

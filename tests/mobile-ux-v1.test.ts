@@ -37,6 +37,9 @@ test("floating phone menu contains the expected routes and active state", () => 
   assert.match(navigation, /active=\{pathname === item\.href\}/);
   assert.match(navigation, /active=\{pathname === "\/settings"\}/);
   assert.match(navigation, /aria-current=\{active \? "page" : undefined\}/);
+  assert.match(css, /\.mobile-navigation-card \.app-nav-link \{[\s\S]*?grid-template-columns:24px minmax\(0,1fr\)/);
+  assert.match(css, /\.mobile-navigation-card \.app-nav-link \{[\s\S]*?height:48px/);
+  assert.match(css, /\.mobile-navigation-card \.app-nav-link > span:last-child \{[\s\S]*?display:block/);
   assert.match(css, /\.mobile-navigation-card \.app-nav-link\.is-active \{[\s\S]*?background:#292d33/);
 });
 
@@ -47,6 +50,17 @@ test("quick Add chooser reuses the existing transaction and SMS workflows", () =
   assert.match(navigation, /Add transaction/);
   assert.match(navigation, /Import bank SMS/);
   assert.match(navigation, /data-modal-initial-focus/);
+});
+
+test("quick Add option rows keep identical geometry and non-resizing focus", () => {
+  const focusBlock = css.match(/\.mobile-add-options > button:focus-visible \{([\s\S]*?)\}/)?.[1] ?? "";
+  assert.match(css, /\.mobile-add-options > button \{[\s\S]*?grid-template-columns:42px minmax\(0,1fr\) 18px/);
+  assert.match(css, /\.mobile-add-options > button \{[\s\S]*?height:76px/);
+  assert.match(css, /\.mobile-add-options > button \{[\s\S]*?padding:13px 14px/);
+  assert.match(css, /\.mobile-add-option-icon \{[\s\S]*?width:42px;[\s\S]*?height:42px/);
+  assert.match(focusBlock, /outline:0/);
+  assert.match(focusBlock, /box-shadow:/);
+  assert.doesNotMatch(focusBlock, /(width|height|min-height|padding|margin):/);
 });
 
 test("phone transaction and SMS dialogs use constrained bottom-sheet geometry", () => {
