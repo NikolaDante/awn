@@ -6829,7 +6829,7 @@
     gap:2px;
   }
 
-  .mobile-navigation-card .app-nav-link {
+  .app-shell .mobile-navigation-card .app-nav-link {
     display:grid;
     grid-template-columns:24px minmax(0,1fr);
     align-items:center;
@@ -6843,13 +6843,13 @@
     font-size:.9rem;
     line-height:1.1;
     text-align:left;
+    transform:none;
   }
 
-  .mobile-navigation-card .app-nav-link > span:first-child {
-    display:grid;
-    width:24px;
-    height:24px;
-    place-items:center;
+  .app-shell .mobile-navigation-card .app-nav-link svg {
+    width:17px;
+    height:17px;
+    transform:none;
     color:#a9a4ff;
   }
 
@@ -6861,19 +6861,20 @@
     white-space:nowrap;
   }
 
-  .mobile-navigation-card .app-nav-link.is-active {
+  .app-shell .mobile-navigation-card .app-nav-link.is-active {
     background:linear-gradient(135deg,var(--awn-violet),#7e75ff);
     color:#fff;
     box-shadow:0 14px 32px rgba(102,92,246,.28);
   }
 
-  .mobile-navigation-card .app-nav-link.is-active:hover,
-  .mobile-navigation-card .app-nav-link.is-active:focus-visible {
+  .app-shell .mobile-navigation-card .app-nav-link.is-active:hover,
+  .app-shell .mobile-navigation-card .app-nav-link.is-active:focus-visible {
     background:linear-gradient(135deg,var(--awn-violet),#7e75ff);
     color:#fff;
+    transform:none;
   }
 
-  .mobile-navigation-card .app-nav-link.is-active > span:first-child {
+  .app-shell .mobile-navigation-card .app-nav-link.is-active svg {
     color:#fff;
   }
 

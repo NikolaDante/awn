@@ -37,11 +37,13 @@ test("floating phone menu contains the expected routes and active state", () => 
   assert.match(navigation, /active=\{pathname === item\.href\}/);
   assert.match(navigation, /active=\{pathname === "\/settings"\}/);
   assert.match(navigation, /aria-current=\{active \? "page" : undefined\}/);
-  assert.match(css, /\.mobile-navigation-card \.app-nav-link \{[\s\S]*?grid-template-columns:24px minmax\(0,1fr\)/);
-  assert.match(css, /\.mobile-navigation-card \.app-nav-link \{[\s\S]*?height:48px/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link \{[\s\S]*?grid-template-columns:24px minmax\(0,1fr\)/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link \{[\s\S]*?height:48px/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link \{[\s\S]*?border-radius:14px/);
   assert.match(css, /\.mobile-navigation-card \.app-nav-link > span:last-child \{[\s\S]*?display:block/);
-  assert.match(css, /\.mobile-navigation-card \.app-nav-link\.is-active \{[\s\S]*?background:linear-gradient\(135deg,var\(--awn-violet\),#7e75ff\)/);
-  assert.match(css, /\.mobile-navigation-card \.app-nav-link\.is-active:hover,[\s\S]*?\.mobile-navigation-card \.app-nav-link\.is-active:focus-visible \{[\s\S]*?background:linear-gradient\(135deg,var\(--awn-violet\),#7e75ff\)/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active \{[\s\S]*?background:linear-gradient\(135deg,var\(--awn-violet\),#7e75ff\)/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active:hover,[\s\S]*?\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active:focus-visible \{[\s\S]*?background:linear-gradient\(135deg,var\(--awn-violet\),#7e75ff\)/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active svg \{[\s\S]*?color:#fff/);
 });
 
 test("quick Add chooser reuses the existing transaction and SMS workflows", () => {
