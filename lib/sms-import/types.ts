@@ -7,7 +7,7 @@ export type SmsImportStatus = "ready" | "needs-review" | "duplicate" | "unsuppor
 
 export type SmsImportProposal = {
   id: string;
-  bank: SmsImportBank;
+  bank: SmsImportBank | null;
   bankMessageType: SmsImportMessageType;
   proposedTransactionType: "income" | "expense" | "transfer" | null;
   amount: Amount | null;

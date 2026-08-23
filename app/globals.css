@@ -1644,7 +1644,7 @@
   }
 }
 
-/* FAB SMS import extends the existing AWN modal language without a parallel surface. */
+/* Bank SMS import extends the existing AWN modal language without a parallel surface. */
 .confirm-dialog.bank-sms-dialog {
   width:min(960px,calc(100vw - 32px));
   max-height:92dvh;
@@ -1714,6 +1714,7 @@
   box-shadow:var(--shadow-soft);
 }
 
+.sms-proposal.is-needs-review { border-color:rgba(161,94,22,.38); box-shadow:inset 3px 0 0 rgba(161,94,22,.58),var(--shadow-soft); }
 .sms-proposal.is-excluded { opacity:.66; background:var(--awn-stone); }
 .sms-proposal-main { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
 .sms-proposal-main > div { display:grid; gap:4px; min-width:0; }

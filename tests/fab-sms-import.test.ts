@@ -5,9 +5,10 @@ import test from "node:test";
 import { calculateActualSummary } from "../lib/financial-calculations.ts";
 import { ledgerBalancesAt, mutateLedger } from "../lib/financial-ledger.ts";
 import { createFinancialProfile, type FinancialProfile } from "../lib/financial-types.ts";
+import { detectBankMessage, parseBankSms, segmentBankMessages, SMS_BANK_REGISTRY } from "../lib/sms-import/coordinator.ts";
 import { cleanFabMerchant, normalizeFabDate, parseFabSms, splitFabMessages, suggestFabCategory } from "../lib/sms-import/fab-parser.ts";
 import { normalizeSmsIdentity } from "../lib/sms-import/fingerprint.ts";
-import { applySmsImportBatch, prepareSmsReview, smsReviewError, smsReviewToTransaction } from "../lib/sms-import/review.ts";
+import { applySmsImportBatch, prepareSmsReview, smsProposalReadiness, smsReviewError, smsReviewToTransaction } from "../lib/sms-import/review.ts";
 
 const salary = `Salary Credit
 Account XXXX8001
@@ -62,6 +63,28 @@ test("the exact five FAB fixtures parse into deterministic normalized proposals"
   assert.equal(proposals[4].proposedTransactionType, "transfer"); assert.equal(proposals[4].amount, 15_200); assert.equal(proposals[4].accountLastFour, "8001"); assert.equal(proposals[4].cardLastFour, "2845"); assert.equal(proposals[4].date, "2026-07-31"); assert.equal(proposals[4].time, "10:08"); assert.equal(proposals[4].observedBalanceAfter, 233_848);
 });
 
+test("the coordinator automatically detects every supported FAB format and never defaults unknown text to FAB", () => {
+  [salary, purchase, outward, inward, atm].forEach((message) => assert.equal(detectBankMessage(message), "fab"));
+  const proposals = parseBankSms(five);
+  assert.equal(proposals.length, 5);
+  assert.ok(proposals.every((item) => item.bank === "fab"));
+  assert.equal(detectBankMessage("Unknown Bank\nPurchase AED 10.00"), null);
+  const unsupported = parseBankSms("Unknown Bank\nPurchase AED 10.00")[0];
+  assert.equal(unsupported.bank, null);
+  assert.equal(unsupported.status, "unsupported");
+  assert.match(unsupported.reviewReason ?? "", /isn't supported yet/);
+});
+
+test("automatic segmentation routes independent blocks and preserves existing FAB fingerprints", () => {
+  const unknown = "Unknown Bank\nPurchase AED 10.00";
+  assert.equal(segmentBankMessages(`${salary}\n\n${unknown}\n\n${purchase}`).length, 3);
+  assert.deepEqual(parseBankSms(`${salary}\n\n${unknown}\n\n${purchase}`).map((item) => item.bank), ["fab", null, "fab"]);
+  assert.equal(parseBankSms(salary)[0].fingerprint, parseFabSms(salary)[0].fingerprint);
+  const duplicateIds = parseBankSms(`${salary}\n\n${salary}`).map((item) => item.id);
+  assert.equal(new Set(duplicateIds).size, 2);
+  assert.deepEqual(SMS_BANK_REGISTRY.fab.aliases, ["FAB", "First Abu Dhabi Bank"]);
+});
+
 test("FAB segmentation tolerates CRLF, whitespace, blank lines, and preserves unsupported blocks", () => {
   const input = `Unknown Bank Message\r\nvalue\r\n\r\n  Salary Credit  \r\n Account XXXX8001\r\n AED 3500.00\r\n05/08/2026\r\nBalance AED 24479.47\r\n\r\nDebit Card Purchase\r\nCard XXXX2845\r\nAED 65.00\r\nGRANDIOSE  SUPERMARKET DUBAI       AE\r\n05/08/26 08:16\r\nBalance AED 20979.47`;
   assert.equal(splitFabMessages(input).length, 3);
@@ -114,6 +137,90 @@ test("blank, missing, ambiguous, unlinked, and currency-mismatched instruments r
   const transfer = prepareSmsReview(base, [parseFabSms(outward)[0]], new Set())[0];
   Object.assign(transfer, { transactionType: "transfer", destination: "account:usd-account" });
   assert.match(smsReviewError({ ...base, accounts: [...base.accounts, { ...base.accounts[0], id: "usd-account", name: "USD account", currency: "USD" }] }, transfer) ?? "", /does not convert currencies/);
+});
+
+test("salary readiness follows the live destination instead of parser confidence", () => {
+  const base = profile();
+  const unmatched = prepareSmsReview(base, [parseBankSms(salary.replace("8001", "9999"))[0]], new Set())[0];
+  assert.equal(unmatched.proposal.status, "needs-review");
+  assert.equal(unmatched.destination, "");
+  assert.equal(smsProposalReadiness(base, unmatched).status, "needs-review");
+  unmatched.destination = "account:fab-account";
+  assert.equal(smsProposalReadiness(base, unmatched).status, "ready");
+  unmatched.destination = "";
+  assert.equal(smsProposalReadiness(base, unmatched).status, "needs-review");
+
+  const ambiguous = prepareSmsReview({ ...base, accounts: [...base.accounts, { ...base.accounts[0], id: "fab-account-2" }] }, [parseBankSms(salary)[0]], new Set())[0];
+  assert.equal(ambiguous.destination, "");
+  assert.equal(smsProposalReadiness({ ...base, accounts: [...base.accounts, { ...base.accounts[0], id: "fab-account-2" }] }, ambiguous).status, "needs-review");
+
+  const mismatched = prepareSmsReview({ ...base, accounts: base.accounts.map((item) => ({ ...item, currency: "USD" })) }, [parseBankSms(salary)[0]], new Set())[0];
+  assert.equal(smsProposalReadiness({ ...base, accounts: base.accounts.map((item) => ({ ...item, currency: "USD" })) }, mismatched).status, "needs-review");
+
+  const exactProfile = { ...base, accounts: [{ ...base.accounts[0], name: "FAB Account", lastFour: "8087" }] };
+  const exact = prepareSmsReview(exactProfile, [parseBankSms(salary.replace("8001", "8087"))[0]], new Set())[0];
+  assert.equal(exact.destination, "account:fab-account");
+  assert.equal(smsProposalReadiness(exactProfile, exact).status, "ready");
+});
+
+test("debit purchase readiness requires one linked matching debit card", () => {
+  const base = profile();
+  const missing = prepareSmsReview({ ...base, debitCards: [] }, [parseBankSms(purchase)[0]], new Set())[0];
+  assert.equal(missing.proposal.status, "needs-review");
+  assert.equal(missing.source, "");
+
+  const unmatched = prepareSmsReview(base, [parseBankSms(purchase.replace("2845", "9999"))[0]], new Set())[0];
+  assert.equal(smsProposalReadiness(base, unmatched).status, "needs-review");
+  unmatched.source = "debit:fab-debit";
+  assert.equal(smsProposalReadiness(base, unmatched).status, "ready");
+  unmatched.source = "";
+  assert.equal(smsProposalReadiness(base, unmatched).status, "needs-review");
+
+  const ambiguousProfile = { ...base, debitCards: [...(base.debitCards ?? []), { ...(base.debitCards ?? [])[0], id: "fab-debit-2" }] };
+  const ambiguous = prepareSmsReview(ambiguousProfile, [parseBankSms(purchase)[0]], new Set())[0];
+  assert.equal(smsProposalReadiness(ambiguousProfile, ambiguous).status, "needs-review");
+
+  const unlinkedProfile = { ...base, debitCards: base.debitCards?.map((card) => ({ ...card, linkedAccountId: undefined })) };
+  const unlinked = prepareSmsReview(unlinkedProfile, [parseBankSms(purchase)[0]], new Set())[0];
+  assert.equal(smsProposalReadiness(unlinkedProfile, unlinked).status, "needs-review");
+  assert.match(smsReviewError(unlinkedProfile, unlinked) ?? "", /Link this debit card/);
+});
+
+test("ATM and remittance readiness requires valid live ledger endpoints", () => {
+  const base = { ...profile(), cashBalance: 3_000_000 };
+  const missingAtm = prepareSmsReview({ ...base, accounts: [] }, [parseBankSms(atm)[0]], new Set())[0];
+  assert.equal(smsProposalReadiness({ ...base, accounts: [] }, missingAtm).status, "needs-review");
+  missingAtm.source = "account:fab-account";
+  assert.equal(smsProposalReadiness(base, missingAtm).status, "ready");
+
+  const outwardItem = prepareSmsReview(base, [parseBankSms(outward)[0]], new Set())[0];
+  assert.equal(smsProposalReadiness(base, outwardItem).status, "needs-review");
+  Object.assign(outwardItem, { transactionType: "transfer", destination: "cash:" });
+  assert.equal(smsProposalReadiness(base, outwardItem).status, "ready");
+
+  const inwardItem = prepareSmsReview(base, [parseBankSms(inward)[0]], new Set())[0];
+  assert.equal(smsProposalReadiness(base, inwardItem).status, "needs-review");
+  Object.assign(inwardItem, { transactionType: "transfer", source: "cash:" });
+  assert.equal(smsProposalReadiness(base, inwardItem).status, "ready");
+});
+
+test("included unresolved and unsupported proposals block import until resolved or excluded", () => {
+  const base = profile();
+  const ready = prepareSmsReview(base, [parseBankSms(salary)[0]], new Set())[0];
+  const unresolved = prepareSmsReview(base, [parseBankSms(salary.replace("8001", "9999"))[0]], new Set())[0];
+  const blocked = applySmsImportBatch(base, [ready, unresolved]);
+  assert.equal(blocked.ok, false);
+  unresolved.included = false;
+  assert.equal(applySmsImportBatch(base, [ready, unresolved]).ok, true);
+
+  const unsupported = prepareSmsReview(base, parseBankSms("Unknown Bank\nPurchase AED 10.00"), new Set())[0];
+  assert.equal(unsupported.included, true);
+  assert.equal(applySmsImportBatch(base, [unsupported]).ok, false);
+  unsupported.included = false;
+  assert.equal(applySmsImportBatch(base, [ready, unsupported]).ok, true);
+
+  const orphan = { ...ready, destination: "" };
+  assert.equal(smsReviewToTransaction(base, orphan).ok, false);
 });
 
 test("duplicates are visible within a batch and against durable Household history", () => {
@@ -185,7 +292,7 @@ test("imported transactions edit and delete through the ordinary ledger while re
 
 test("the importer uses the shared modal, cloud import RPC, and enabled Transactions entry point", () => {
   const root = process.cwd(); const ui = readFileSync(join(root, "components/bank-sms-import.tsx"), "utf8"); const page = readFileSync(join(root, "app/(financial)/(authenticated)/transactions/page.tsx"), "utf8"); const repository = readFileSync(join(root, "lib/cloud-financial-repository.ts"), "utf8");
-  assert.match(ui, /<ModalDialog/); assert.match(ui, /Import bank SMS/); assert.match(ui, /Manual paste only/); assert.match(ui, /More banks coming soon/); assert.match(ui, /Resolve \{unresolved\}/); assert.doesNotMatch(ui, /WebOTP|navigator\.sms|provider_token/);
+  assert.match(ui, /<ModalDialog/); assert.match(ui, /Import bank SMS/); assert.match(ui, /Manual paste only/); assert.match(ui, /Currently supported: FAB · More banks coming soon/); assert.match(ui, /Paste one or more bank transaction messages/); assert.match(ui, /Resolve \{unresolved\}/); assert.match(ui, /expanded \? "Done" : "Edit"/); assert.doesNotMatch(ui, /FAB_LABEL|<label className="form-field">Bank|parseBankSms\("fab"|WebOTP|navigator\.sms|provider_token/);
   assert.match(page, /<ImportBankSmsButton/); assert.doesNotMatch(page, /Import bank SMS<\/button>.*disabled/);
   assert.match(repository, /awn_import_financial_transactions/); assert.match(repository, /financial_import_fingerprints/);
 });

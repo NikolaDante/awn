@@ -1,118 +1,188 @@
 import { mutateLedger, UNBUDGETED_CATEGORY } from "../financial-ledger.ts";
 import { newLocalId, type Account, type DebitCard, type FinancialProfile, type Transaction } from "../financial-types.ts";
-import type { FinancialImportRecord, SmsImportConversion, SmsImportProposal, SmsImportReviewItem } from "./types.ts";
+import { matchesSmsBankAlias, smsBankAliases } from "./coordinator.ts";
+import type { FinancialImportRecord, SmsImportBank, SmsImportConversion, SmsImportProposal, SmsImportReviewItem, SmsImportStatus } from "./types.ts";
 
-const bankAlias = (name: string) => /(^|\b)fab(\b|$)|first\s+abu\s+dhabi/i.test(name);
-const encode = (kind: string, id?: string | null) => `${kind}:${id ?? ""}`;
+const encode = (kind: string, id?: string | null) => kind === "cash" ? "cash:" : id ? `${kind}:${id}` : "";
 export const decodeSmsEndpoint = (value: string) => { const [kind, ...rest] = value.split(":"); return { kind, id: rest.join(":") || undefined }; };
 
-function preferredUnique<T extends { name: string }>(matches: T[]) {
-  if (matches.length === 1) return { match: matches[0], reason: null };
-  const fabMatches = matches.filter((item) => bankAlias(item.name));
-  if (fabMatches.length === 1) return { match: fabMatches[0], reason: null };
-  return { match: null, reason: matches.length ? "More than one matching FAB instrument was found." : "No matching FAB instrument was found." };
+function bankLabel(bank: SmsImportBank) {
+  return smsBankAliases(bank)[0];
 }
 
-function accountMatch(profile: FinancialProfile, lastFour: string | null) {
-  if (!lastFour) return { match: null as Account | null, reason: "Choose the matching account." };
-  return preferredUnique(profile.accounts.filter((item) => item.type !== "cash" && item.lastFour === lastFour));
+function accountMatch(profile: FinancialProfile, proposal: SmsImportProposal) {
+  const bank = proposal.bank;
+  if (!bank || !proposal.accountLastFour) return { match: null as Account | null, reason: "Choose the matching account." };
+  const suffixMatches = profile.accounts.filter((item) => item.type !== "cash" && item.lastFour === proposal.accountLastFour);
+  const bankMatches = suffixMatches.filter((item) => matchesSmsBankAlias(bank, item.name));
+  if (!bankMatches.length) return { match: null as Account | null, reason: `No matching ${bankLabel(bank)} account was found.` };
+  const currencyMatches = proposal.currency ? bankMatches.filter((item) => (item.currency ?? profile.currency) === proposal.currency) : bankMatches;
+  if (!currencyMatches.length && bankMatches.length === 1) {
+    const match = bankMatches[0];
+    return { match, reason: `The SMS uses ${proposal.currency}, but the matched instrument uses ${match.currency ?? profile.currency}. AWN does not convert currencies.` };
+  }
+  if (currencyMatches.length === 1) return { match: currencyMatches[0], reason: null };
+  return { match: null as Account | null, reason: `More than one matching ${bankLabel(bank)} account was found.` };
 }
 
-function debitMatch(profile: FinancialProfile, lastFour: string | null) {
-  if (!lastFour) return { match: null as DebitCard | null, reason: "Choose the matching debit card." };
-  return preferredUnique((profile.debitCards ?? []).filter((item) => item.lastFour === lastFour));
-}
-
-function instrumentCurrency(profile: FinancialProfile, proposal: SmsImportProposal) {
-  if (proposal.matchedCardId) return profile.debitCards?.find((item) => item.id === proposal.matchedCardId)?.currency;
-  if (proposal.matchedAccountId) return profile.accounts.find((item) => item.id === proposal.matchedAccountId)?.currency ?? profile.currency;
-  return null;
+function debitMatch(profile: FinancialProfile, proposal: SmsImportProposal) {
+  const bank = proposal.bank;
+  if (!bank || !proposal.cardLastFour) return { match: null as DebitCard | null, reason: "Choose the matching debit card." };
+  const suffixMatches = (profile.debitCards ?? []).filter((item) => item.lastFour === proposal.cardLastFour);
+  const bankMatches = suffixMatches.filter((item) => matchesSmsBankAlias(bank, item.name));
+  if (!bankMatches.length) return { match: null as DebitCard | null, reason: `No matching ${bankLabel(bank)} debit card was found.` };
+  const currencyMatches = proposal.currency ? bankMatches.filter((item) => item.currency === proposal.currency) : bankMatches;
+  if (!currencyMatches.length && bankMatches.length === 1) {
+    const match = bankMatches[0];
+    return { match, reason: `The SMS uses ${proposal.currency}, but the matched instrument uses ${match.currency}. AWN does not convert currencies.` };
+  }
+  const linkedMatches = currencyMatches.filter((item) => item.linkedAccountId && profile.accounts.some((account) => account.id === item.linkedAccountId));
+  if (linkedMatches.length === 1) return { match: linkedMatches[0], reason: null };
+  if (linkedMatches.length > 1 || currencyMatches.length > 1) return { match: null as DebitCard | null, reason: `More than one matching ${bankLabel(bank)} debit card was found.` };
+  if (currencyMatches.length === 1) return { match: currencyMatches[0], reason: "Link this debit card to an account or choose another card." };
+  return { match: null as DebitCard | null, reason: `No matching ${bankLabel(bank)} debit card was found.` };
 }
 
 export function matchSmsProposal(profile: FinancialProfile, proposal: SmsImportProposal): SmsImportProposal {
-  if (proposal.status === "unsupported") return proposal;
+  if (proposal.status === "unsupported" || !proposal.bank) return proposal;
   let matchedAccountId: string | null = null; let matchedCardId: string | null = null; let matchReason: string | null = null;
   if (proposal.accountLastFour) {
-    const result = accountMatch(profile, proposal.accountLastFour);
+    const result = accountMatch(profile, proposal);
     matchedAccountId = result.match?.id ?? null;
     matchReason = result.reason;
   }
   if (proposal.bankMessageType === "debit_card_purchase") {
-    const result = debitMatch(profile, proposal.cardLastFour);
+    const result = debitMatch(profile, proposal);
     matchedCardId = result.match?.id ?? null;
     matchReason = result.reason;
-    if (result.match && !result.match.linkedAccountId) matchReason = "Link this debit card to an account or choose another card.";
   }
-  const candidate = { ...proposal, matchedAccountId, matchedCardId };
-  const selectedCurrency = instrumentCurrency(profile, candidate);
-  if (selectedCurrency && proposal.currency && selectedCurrency !== proposal.currency) matchReason = `The SMS uses ${proposal.currency}, but the matched instrument uses ${selectedCurrency}. AWN does not convert currencies.`;
   const intrinsicallyAmbiguous = proposal.bankMessageType === "outward_remittance" || proposal.bankMessageType === "inward_remittance";
   const requiredMatchMissing = proposal.bankMessageType === "debit_card_purchase" ? !matchedCardId : !matchedAccountId;
   const needsReview = intrinsicallyAmbiguous || requiredMatchMissing || Boolean(matchReason);
-  return { ...candidate, needsReview, reviewReason: matchReason ?? proposal.reviewReason, status: needsReview ? "needs-review" : "ready" };
+  return { ...proposal, matchedAccountId, matchedCardId, needsReview, reviewReason: matchReason ?? proposal.reviewReason, status: needsReview ? "needs-review" : "ready" };
 }
 
 function initialReviewItem(proposal: SmsImportProposal): SmsImportReviewItem {
   const source = proposal.bankMessageType === "debit_card_purchase" ? encode("debit", proposal.matchedCardId) : proposal.bankMessageType === "outward_remittance" || proposal.bankMessageType === "atm_cash_withdrawal" ? encode("account", proposal.matchedAccountId) : "";
   const destination = proposal.bankMessageType === "salary_credit" || proposal.bankMessageType === "inward_remittance" ? encode("account", proposal.matchedAccountId) : proposal.bankMessageType === "atm_cash_withdrawal" ? encode("cash") : "";
-  return { proposal, included: proposal.status !== "duplicate" && proposal.status !== "unsupported", transactionType: proposal.proposedTransactionType, category: proposal.suggestedCategory ?? UNBUDGETED_CATEGORY, incomeCategory: proposal.suggestedCategory ?? "Miscellaneous Income", source, destination, note: proposal.title };
+  return { proposal, included: proposal.status !== "duplicate", transactionType: proposal.proposedTransactionType, category: proposal.suggestedCategory ?? UNBUDGETED_CATEGORY, incomeCategory: proposal.suggestedCategory ?? "Miscellaneous Income", source, destination, note: proposal.title };
+}
+
+type ResolvedEndpoint = { kind: "cash" | "account" | "debit" | "credit"; id?: string; currency: FinancialProfile["currency"] };
+
+function resolveEndpoint(profile: FinancialProfile, value: string): ResolvedEndpoint | null {
+  const endpoint = decodeSmsEndpoint(value);
+  if (endpoint.kind === "cash" && !endpoint.id) return { kind: "cash", currency: profile.currency };
+  if (endpoint.kind === "account" && endpoint.id) {
+    const account = profile.accounts.find((item) => item.id === endpoint.id && item.type !== "cash");
+    return account ? { kind: "account", id: account.id, currency: account.currency ?? profile.currency } : null;
+  }
+  if (endpoint.kind === "debit" && endpoint.id) {
+    const card = profile.debitCards?.find((item) => item.id === endpoint.id);
+    return card ? { kind: "debit", id: card.id, currency: card.currency } : null;
+  }
+  if (endpoint.kind === "credit" && endpoint.id) {
+    const card = profile.creditCards.find((item) => item.id === endpoint.id);
+    return card ? { kind: "credit", id: card.id, currency: card.currency ?? profile.currency } : null;
+  }
+  return null;
+}
+
+function allowedTransactionType(proposal: SmsImportProposal, type: SmsImportReviewItem["transactionType"]) {
+  if (proposal.bankMessageType === "salary_credit") return type === "income";
+  if (proposal.bankMessageType === "debit_card_purchase") return type === "expense";
+  if (proposal.bankMessageType === "atm_cash_withdrawal") return type === "transfer";
+  if (proposal.bankMessageType === "outward_remittance") return type === "expense" || type === "transfer";
+  if (proposal.bankMessageType === "inward_remittance") return type === "income" || type === "transfer";
+  return false;
+}
+
+function transactionFromReview(item: SmsImportReviewItem, id: string, now: string): Transaction | null {
+  const proposal = item.proposal;
+  if (!proposal.bank || !item.transactionType || !proposal.amount || !proposal.date) return null;
+  const base = { id, amount: proposal.amount, date: proposal.date, note: item.note.trim() || proposal.title, import: { origin: "sms" as const, bank: proposal.bank, messageType: proposal.bankMessageType, fingerprint: proposal.fingerprint, observedBalanceAfter: proposal.observedBalanceAfter ?? undefined }, createdAt: now, updatedAt: now };
+  if (item.transactionType === "income") { const destination = decodeSmsEndpoint(item.destination); return { ...base, type: "income", incomeSourceName: item.incomeCategory.trim() || "Miscellaneous Income", destinationKind: destination.kind as "cash" | "account", destinationId: destination.id }; }
+  if (item.transactionType === "expense") { const source = decodeSmsEndpoint(item.source); return { ...base, type: "expense", category: item.category.trim() || UNBUDGETED_CATEGORY, sourceKind: source.kind as "cash" | "account" | "debit" | "credit", sourceId: source.id }; }
+  const source = decodeSmsEndpoint(item.source); const destination = decodeSmsEndpoint(item.destination);
+  return { ...base, type: "transfer", sourceKind: source.kind as "cash" | "account", sourceId: source.id, destinationKind: destination.kind as "cash" | "account" | "credit", destinationId: destination.id };
+}
+
+export type SmsProposalReadiness = { status: SmsImportStatus; error: string | null };
+
+export function smsProposalReadiness(profile: FinancialProfile, item: SmsImportReviewItem): SmsProposalReadiness {
+  const proposal = item.proposal;
+  if (proposal.status === "duplicate") return { status: "duplicate", error: proposal.reviewReason ?? "This bank message was already imported." };
+  if (proposal.status === "unsupported" || !proposal.bank || proposal.parseErrors.length) return { status: "unsupported", error: proposal.reviewReason ?? "This bank or message format isn't supported yet." };
+  if (!Number.isSafeInteger(proposal.amount) || (proposal.amount ?? 0) <= 0) return { status: "needs-review", error: "Enter an amount above zero." };
+  if (!proposal.currency) return { status: "needs-review", error: "Choose a valid currency." };
+  if (!proposal.date || !/^\d{4}-\d{2}-\d{2}$/.test(proposal.date)) return { status: "needs-review", error: "Choose a valid date." };
+  if (!item.transactionType || !allowedTransactionType(proposal, item.transactionType)) return { status: "needs-review", error: proposal.bankMessageType === "outward_remittance" ? "Choose Expense or Transfer." : proposal.bankMessageType === "inward_remittance" ? "Choose Income or Transfer." : "Choose a valid transaction type." };
+
+  const source = item.source ? resolveEndpoint(profile, item.source) : null;
+  const destination = item.destination ? resolveEndpoint(profile, item.destination) : null;
+  if (item.transactionType === "income") {
+    if (!destination) return { status: "needs-review", error: "Choose where the income was received." };
+    if (destination.kind !== "cash" && destination.kind !== "account") return { status: "needs-review", error: "Choose a valid income destination." };
+    if (!item.incomeCategory.trim()) return { status: "needs-review", error: "Choose an income category." };
+  }
+  if (item.transactionType === "expense") {
+    if (!source) return { status: "needs-review", error: "Choose how the expense was paid." };
+    if (!item.category.trim()) return { status: "needs-review", error: "Choose an expense category." };
+    if (proposal.bankMessageType === "debit_card_purchase" && source.kind !== "debit") return { status: "needs-review", error: "Choose the matching debit card." };
+    if (source.kind === "debit") {
+      const card = profile.debitCards?.find((candidate) => candidate.id === source.id);
+      if (!card?.linkedAccountId || !profile.accounts.some((account) => account.id === card.linkedAccountId)) return { status: "needs-review", error: "Link this debit card to an account or choose another source." };
+    }
+  }
+  if (item.transactionType === "transfer") {
+    if (!source || !destination) return { status: "needs-review", error: "Choose both transfer balances." };
+    if (item.source === item.destination) return { status: "needs-review", error: "Choose different transfer balances." };
+    if (source.kind !== "cash" && source.kind !== "account") return { status: "needs-review", error: "Choose a valid transfer source." };
+    if (destination.kind !== "cash" && destination.kind !== "account" && destination.kind !== "credit") return { status: "needs-review", error: "Choose a valid transfer destination." };
+    if (proposal.bankMessageType === "atm_cash_withdrawal" && (source.kind !== "account" || destination.kind !== "cash")) return { status: "needs-review", error: "Choose the debited account and Cash for this withdrawal." };
+  }
+
+  const endpoints = item.transactionType === "income" ? [destination!] : item.transactionType === "expense" ? [source!] : [source!, destination!];
+  if (endpoints.some((endpoint) => endpoint.currency !== proposal.currency)) return { status: "needs-review", error: `Choose instruments using ${proposal.currency}. AWN does not convert currencies.` };
+
+  const previewTransaction = transactionFromReview(item, `sms-readiness-${proposal.id}`, `${proposal.date}T00:00:00.000Z`);
+  if (!previewTransaction) return { status: "needs-review", error: "Complete the required transaction details." };
+  const ledgerResult = mutateLedger(profile, { kind: "add", transaction: previewTransaction });
+  if (!ledgerResult.ok) return { status: "needs-review", error: ledgerResult.error };
+  return { status: "ready", error: null };
 }
 
 export function prepareSmsReview(profile: FinancialProfile, proposals: SmsImportProposal[], importedFingerprints: ReadonlySet<string>) {
   const batch = new Set<string>();
   return proposals.map((raw) => {
     let proposal = matchSmsProposal(profile, raw);
-    if (importedFingerprints.has(proposal.fingerprint) || batch.has(proposal.fingerprint)) proposal = { ...proposal, status: "duplicate", needsReview: false, reviewReason: "This FAB message was already imported." };
+    if (importedFingerprints.has(proposal.fingerprint) || batch.has(proposal.fingerprint)) proposal = { ...proposal, status: "duplicate", needsReview: false, reviewReason: "This bank message was already imported." };
     batch.add(proposal.fingerprint);
-    return initialReviewItem(proposal);
+    let item = initialReviewItem(proposal);
+    if (proposal.status !== "duplicate" && proposal.status !== "unsupported") {
+      const readiness = smsProposalReadiness(profile, item);
+      proposal = { ...proposal, status: readiness.status, needsReview: readiness.status === "needs-review", reviewReason: readiness.error };
+      item = { ...item, proposal };
+    }
+    return item;
   });
 }
 
-function endpointCurrency(profile: FinancialProfile, value: string) {
-  const endpoint = decodeSmsEndpoint(value);
-  if (endpoint.kind === "cash") return profile.currency;
-  if (endpoint.kind === "account") return profile.accounts.find((item) => item.id === endpoint.id)?.currency ?? profile.currency;
-  if (endpoint.kind === "debit") return profile.debitCards?.find((item) => item.id === endpoint.id)?.currency;
-  if (endpoint.kind === "credit") return profile.creditCards.find((item) => item.id === endpoint.id)?.currency ?? profile.currency;
-  return null;
-}
-
 export function smsReviewError(profile: FinancialProfile, item: SmsImportReviewItem) {
-  if (!item.included) return null;
-  const proposal = item.proposal;
-  if (proposal.status === "duplicate" || proposal.status === "unsupported" || proposal.parseErrors.length || !proposal.amount || !proposal.currency || !proposal.date) return proposal.reviewReason ?? "Exclude this unsupported message.";
-  if (!item.transactionType) return proposal.bankMessageType === "outward_remittance" ? "Choose Expense or Transfer." : "Choose Income or Transfer.";
-  if (item.transactionType === "income" && !item.destination) return "Choose where the income was received.";
-  if (item.transactionType === "expense" && !item.source) return "Choose how the expense was paid.";
-  if (item.transactionType === "expense" && !item.category.trim()) return "Choose an expense category.";
-  if (item.transactionType === "transfer" && (!item.source || !item.destination)) return "Choose both transfer balances.";
-  if (item.transactionType === "transfer" && item.source === item.destination) return "Choose different transfer balances.";
-  const relevantEndpoints = item.transactionType === "income" ? [item.destination] : item.transactionType === "expense" ? [item.source] : [item.source, item.destination];
-  const currencies = relevantEndpoints.map((endpoint) => endpointCurrency(profile, endpoint));
-  if (currencies.some((currency) => !currency)) return "Choose a valid account or card.";
-  if (currencies.some((currency) => currency !== proposal.currency)) return `Choose instruments using ${proposal.currency}. AWN does not convert currencies.`;
-  if (item.transactionType === "expense" && decodeSmsEndpoint(item.source).kind === "debit") {
-    const card = profile.debitCards?.find((candidate) => candidate.id === decodeSmsEndpoint(item.source).id);
-    if (!card?.linkedAccountId) return "Link this debit card to an account or choose another source.";
-  }
-  return null;
+  return smsProposalReadiness(profile, item).error;
 }
 
 export function smsReviewResolved(profile: FinancialProfile, item: SmsImportReviewItem) {
-  return smsReviewError(profile, item) === null;
+  return smsProposalReadiness(profile, item).status === "ready";
 }
 
 export function smsReviewToTransaction(profile: FinancialProfile, item: SmsImportReviewItem, now = new Date().toISOString()): SmsImportConversion {
-  const proposal = item.proposal;
-  const error = smsReviewError(profile, item);
-  if (error || !item.included || !item.transactionType || !proposal.amount || !proposal.date) return { ok: false, error: error ?? "This message is excluded." };
-  const id = newLocalId();
-  const base = { id, amount: proposal.amount, date: proposal.date, note: item.note.trim() || proposal.title, import: { origin: "sms" as const, bank: "fab" as const, messageType: proposal.bankMessageType, fingerprint: proposal.fingerprint, observedBalanceAfter: proposal.observedBalanceAfter ?? undefined }, createdAt: now, updatedAt: now };
-  let transaction: Transaction;
-  if (item.transactionType === "income") { const destination = decodeSmsEndpoint(item.destination); transaction = { ...base, type: "income", incomeSourceName: item.incomeCategory.trim() || "Miscellaneous Income", destinationKind: destination.kind as "cash" | "account", destinationId: destination.id }; }
-  else if (item.transactionType === "expense") { const source = decodeSmsEndpoint(item.source); transaction = { ...base, type: "expense", category: item.category.trim() || UNBUDGETED_CATEGORY, sourceKind: source.kind as "cash" | "account" | "debit" | "credit", sourceId: source.id }; }
-  else { const source = decodeSmsEndpoint(item.source); const destination = decodeSmsEndpoint(item.destination); transaction = { ...base, type: "transfer", sourceKind: source.kind as "cash" | "account", sourceId: source.id, destinationKind: destination.kind as "cash" | "account" | "credit", destinationId: destination.id }; }
-  return { ok: true, transaction, record: { fingerprint: proposal.fingerprint, bank: "fab", messageType: proposal.bankMessageType, transactionId: id, observedBalanceAfter: proposal.observedBalanceAfter ?? undefined } };
+  if (!item.included) return { ok: false, error: "This message is excluded." };
+  const readiness = smsProposalReadiness(profile, item);
+  if (readiness.status !== "ready") return { ok: false, error: readiness.error ?? "Resolve this transaction before importing." };
+  const transaction = transactionFromReview(item, newLocalId(), now);
+  if (!transaction || !item.proposal.bank) return { ok: false, error: "Complete the required transaction details." };
+  return { ok: true, transaction, record: { fingerprint: item.proposal.fingerprint, bank: item.proposal.bank, messageType: item.proposal.bankMessageType, transactionId: transaction.id, observedBalanceAfter: item.proposal.observedBalanceAfter ?? undefined } };
 }
 
 export function applySmsImportBatch(profile: FinancialProfile, items: SmsImportReviewItem[]) {

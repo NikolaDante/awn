@@ -3,7 +3,7 @@ import type { Currency } from "../financial-types.ts";
 import { normalizeSmsIdentity, smsImportFingerprint } from "./fingerprint.ts";
 import type { SmsImportMessageType, SmsImportProposal } from "./types.ts";
 
-const HEADERS = [
+export const FAB_MESSAGE_HEADERS = [
   ["salary credit", "salary_credit"],
   ["debit card purchase", "debit_card_purchase"],
   ["outward remittance", "outward_remittance"],
@@ -11,7 +11,17 @@ const HEADERS = [
   ["atm cash withdrawal / debit", "atm_cash_withdrawal"],
 ] as const satisfies readonly (readonly [string, SmsImportMessageType])[];
 
-const headerType = (line: string) => HEADERS.find(([header]) => line.trim().replace(/\s+/g, " ").toLowerCase() === header)?.[1] ?? null;
+const headerType = (line: string) => FAB_MESSAGE_HEADERS.find(([header]) => line.trim().replace(/\s+/g, " ").toLowerCase() === header)?.[1] ?? null;
+
+export function isFabBankMessage(rawMessage: string) {
+  const lines = rawMessage.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim()).filter(Boolean);
+  const messageType = headerType(lines[0] ?? "");
+  if (messageType === "salary_credit") return /^Account\s+X{4}\d{4}$/i.test(lines[1] ?? "");
+  if (messageType === "debit_card_purchase") return /^Card\s+X{4}\d{4}$/i.test(lines[1] ?? "");
+  if (messageType === "outward_remittance" || messageType === "inward_remittance") return /^(Debit|Credit)$/i.test(lines[1] ?? "") && /^Account\s+X{4}\d{4}$/i.test(lines[2] ?? "");
+  if (messageType === "atm_cash_withdrawal") return /^Account\s+X{4}\d{4}$/i.test(lines[1] ?? "") && /^Card\s+X{4}\d{4}$/i.test(lines[2] ?? "");
+  return false;
+}
 
 export function splitFabMessages(input: string) {
   const lines = input.replace(/\r\n?/g, "\n").split("\n");
