@@ -7,6 +7,7 @@ export type CloudFinancialState = {
   householdId: string;
   householdName: string;
   memberRole: "owner" | "member";
+  memberCount: number;
   profile: FinancialProfile | null;
   revision: number;
   initializedAt: string | null;
@@ -17,6 +18,7 @@ export type CloudStateRow = {
   household_id?: unknown;
   household_name?: unknown;
   member_role?: unknown;
+  member_count?: unknown;
   profile_data?: unknown;
   revision?: unknown;
   initialized_at?: unknown;
@@ -28,7 +30,7 @@ const optionalTimestamp = (value: unknown) => value === null || value === undefi
 export function parseCloudStateRow(value: unknown): CloudFinancialState {
   const row = (Array.isArray(value) ? value[0] : value) as CloudStateRow | null;
   if (!row || typeof row.household_id !== "string" || typeof row.household_name !== "string"
-    || (row.member_role !== "owner" && row.member_role !== "member")
+    || (row.member_role !== "owner" && row.member_role !== "member") || !Number.isSafeInteger(row.member_count) || Number(row.member_count) < 1
     || !Number.isSafeInteger(row.revision) || Number(row.revision) < 0
     || !optionalTimestamp(row.initialized_at) || !optionalTimestamp(row.migrated_at)) {
     throw new Error("invalid_cloud_financial_state");
@@ -42,6 +44,7 @@ export function parseCloudStateRow(value: unknown): CloudFinancialState {
     householdId: row.household_id,
     householdName: row.household_name,
     memberRole: row.member_role,
+    memberCount: Number(row.member_count),
     profile: (row.profile_data ?? null) as FinancialProfile | null,
     revision: Number(row.revision),
     initializedAt: (row.initialized_at ?? null) as string | null,

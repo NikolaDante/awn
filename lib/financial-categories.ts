@@ -69,6 +69,7 @@ export function isDefaultCategoryName(name: string) {
 
 export function profileCategoryNames(profile: FinancialProfile) {
   const stored = [
+    ...(profile.customCategories ?? []),
     ...profile.categoryBudgets.map((category) => category.name),
     ...profile.transactions.flatMap((transaction) => transaction.type === "expense" ? [transaction.category] : []),
   ];

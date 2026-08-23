@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { formatMoney } from "@/lib/financial-calculations";
+import { useUserPreferences } from "@/components/user-preferences-provider";
 import type { Currency } from "@/lib/financial-types";
 
 export function AnimatedMoney({ value, currency, className }: { value: number; currency: Currency; className?: string }) {
+  const { formatMoney } = useUserPreferences();
   const previous = useRef(value);
   const initial = useRef(true);
   const [display, setDisplay] = useState(value);

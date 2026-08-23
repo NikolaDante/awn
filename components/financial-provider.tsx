@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { normalizeBudgetSnapshots } from "@/lib/financial-budget";
-import { cloudFinancialIssue, loadCloudFinancialProfile, saveCloudFinancialImport, saveCloudFinancialProfile } from "@/lib/cloud-financial-repository";
+import { clearCloudFinancialData, cloudFinancialIssue, loadCloudFinancialProfile, saveCloudFinancialImport, saveCloudFinancialProfile, updateCloudHouseholdName } from "@/lib/cloud-financial-repository";
 import type { CloudFinancialState } from "@/lib/cloud-financial-core";
 import { financialReferenceMonth } from "@/lib/financial-date";
 import { normalizeFinancialPurposes } from "@/lib/financial-purpose";
@@ -16,11 +16,16 @@ export type FinancialImportSave = (profile: FinancialProfile, imports: Financial
 type FinancialContextValue = {
   profile: FinancialProfile | null;
   activeHouseholdId: string | null;
+  householdName: string | null;
+  memberRole: "owner" | "member" | null;
+  memberCount: number;
   ready: boolean;
   saving: boolean;
   issue: string | null;
   save: FinancialSave;
   importTransactions: FinancialImportSave;
+  saveHouseholdName: (name: string) => Promise<boolean>;
+  clearFinancialData: () => Promise<boolean>;
   retry: () => void;
 };
 
@@ -29,6 +34,9 @@ const FinancialContext = createContext<FinancialContextValue | null>(null);
 export function FinancialProvider({ children, ownerId }: Readonly<{ children: React.ReactNode; ownerId: string }>) {
   const [profile, setProfile] = useState<FinancialProfile | null>(null);
   const [activeHouseholdId, setActiveHouseholdId] = useState<string | null>(null);
+  const [householdName, setHouseholdName] = useState<string | null>(null);
+  const [memberRole, setMemberRole] = useState<"owner" | "member" | null>(null);
+  const [memberCount, setMemberCount] = useState(0);
   const [issue, setIssue] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -45,6 +53,9 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
       profileRef.current = result.profile;
       setProfile(result.profile);
       setActiveHouseholdId(result.householdId);
+      setHouseholdName(result.householdName);
+      setMemberRole(result.memberRole);
+      setMemberCount(result.memberCount);
       setIssue(result.issue);
       setReady(true);
     }).catch((error) => {
@@ -53,6 +64,9 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
       cloudRef.current = null;
       setProfile(null);
       setActiveHouseholdId(null);
+      setHouseholdName(null);
+      setMemberRole(null);
+      setMemberCount(0);
       setIssue(cloudFinancialIssue(error, "load"));
       setReady(true);
     });
@@ -124,7 +138,21 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
     setIssue(null);
     setReloadToken((current) => current + 1);
   }, []);
-  return <FinancialContext.Provider value={{ profile, activeHouseholdId, ready, saving, issue, save, importTransactions, retry }}>{children}</FinancialContext.Provider>;
+  const saveHouseholdName = useCallback(async (name: string) => {
+    if (!cloudRef.current) { setIssue("We couldn’t update this plan because your Household is not ready."); return false; }
+    setSaving(true);
+    try { const savedName = await updateCloudHouseholdName(cloudRef.current, name); cloudRef.current = { ...cloudRef.current, householdName: savedName }; setHouseholdName(savedName); setIssue(null); return true; }
+    catch { setIssue("We couldn’t update the plan name. Check your connection and try again."); return false; }
+    finally { setSaving(false); }
+  }, []);
+  const clearFinancialData = useCallback(async () => {
+    if (!cloudRef.current) { setIssue("We couldn’t clear this plan because your Household is not ready."); return false; }
+    setSaving(true);
+    try { const cleared = await clearCloudFinancialData(cloudRef.current); cloudRef.current = cleared; profileRef.current = cleared.profile; setProfile(cleared.profile); setIssue(null); return true; }
+    catch (error) { setIssue(error instanceof Error && error.message.includes("shared_household_clear_blocked") ? "Clearing shared Household data will be available through household management." : "We couldn’t clear the financial data. Nothing was changed."); return false; }
+    finally { setSaving(false); }
+  }, []);
+  return <FinancialContext.Provider value={{ profile, activeHouseholdId, householdName, memberRole, memberCount, ready, saving, issue, save, importTransactions, saveHouseholdName, clearFinancialData, retry }}>{children}</FinancialContext.Provider>;
 }
 
 export function useFinancialProfile() {

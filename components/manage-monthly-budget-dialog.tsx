@@ -6,8 +6,8 @@ import { CategoryBudgetForm } from "@/components/category-budget-form";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { ModalDialog } from "@/components/modal-dialog";
 import { MoneyInput } from "@/components/money-input";
+import { useUserPreferences } from "@/components/user-preferences-provider";
 import { budgetCategoriesForMonth, budgetDraftAllocation, overallBudgetForMonth, replaceManagedBudgetSnapshot } from "@/lib/financial-budget";
-import { formatMoney } from "@/lib/financial-calculations";
 import { financialReferenceMonth } from "@/lib/financial-date";
 import { newLocalId, type CategoryBudget, type FinancialProfile } from "@/lib/financial-types";
 
@@ -15,6 +15,7 @@ export type ManageBudgetOptions = { focusCategories?: boolean; categoryId?: stri
 
 export function ManageMonthlyBudgetDialog({ profile, close, options = {} }: { profile: FinancialProfile; close: () => void; options?: ManageBudgetOptions }) {
   const { save } = useFinancialProfile();
+  const { formatMoney } = useUserPreferences();
   const month = financialReferenceMonth(profile);
   const initialCategories = budgetCategoriesForMonth(profile, month);
   const initialEditor = () => {

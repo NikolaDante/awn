@@ -12,8 +12,9 @@ import { ConfirmationDialog, ModalDialog } from "@/components/modal-dialog";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
 import { AddTransactionButton, AllTransactionsDialog, TransactionDeleteDialog, TransactionForm } from "@/components/transactions-ui";
 import { useModalDialog } from "@/components/use-modal-dialog";
+import { useUserPreferences } from "@/components/user-preferences-provider";
 import { budgetCategoriesForMonth, budgetSummary, categoryBudgetPosition, dashboardBudgetHeroState, hasOverallBudget, monthlyBudgetPosition, overallBudgetForMonth } from "@/lib/financial-budget";
-import { calculateActualSummary, formatMoney } from "@/lib/financial-calculations";
+import { calculateActualSummary } from "@/lib/financial-calculations";
 import { budgetPeriodForDate, budgetPeriodForKey, dateInBudgetPeriod, financialReferenceDate, financialReferenceMonth, financialReferencePeriod } from "@/lib/financial-date";
 import { profileSavingsGoalStatus } from "@/lib/financial-goal-status";
 import { deleteSavingsGoal, savingsGoalTotals, upsertSavingsGoal } from "@/lib/financial-savings";
@@ -76,6 +77,7 @@ function EmptyPanel({ title, text, action, href, onAction }: { title: string; te
 }
 
 function TransactionRow({ item, profile }: { item: Transaction; profile: FinancialProfile }) {
+  const { formatMoney, formatDate } = useUserPreferences();
   const title = item.note || transactionHistoryLabel(item);
   const detail = item.type === "expense" ? item.category : item.type === "income" ? "Income" : item.type === "transfer" ? "Transfer" : "Credit card";
   const accountName = (id: string | undefined) => id ? profile.accounts.find((account) => account.id === id)?.name ?? "Former account" : "Unlinked";
@@ -83,13 +85,14 @@ function TransactionRow({ item, profile }: { item: Transaction; profile: Financi
   const debitName = (id: string | undefined) => id ? profile.debitCards?.find((card) => card.id === id)?.name ?? "Former debit card" : "Unlinked";
   const endpoint = (kind: string | undefined, id: string | undefined) => kind === "cash" ? "Cash" : kind === "account" ? accountName(id) : kind === "debit" ? debitName(id) : kind === "credit" ? cardName(id) : "Unlinked";
   const accountLabel = item.type === "income" ? `To ${item.destinationKind ? endpoint(item.destinationKind, item.destinationId) : accountName(item.destinationAccountId)}` : item.type === "expense" ? item.sourceKind ? endpoint(item.sourceKind, item.sourceId) : item.cardId ? cardName(item.cardId) : accountName(item.accountId) : item.type === "transfer" ? `${endpoint(item.sourceKind ?? "account", item.sourceId ?? item.sourceAccountId)} to ${endpoint(item.destinationKind ?? "account", item.destinationId ?? item.destinationAccountId)}` : `${accountName(item.payingAccountId)} to ${cardName(item.receivingCardId)}`;
-  const dateLabel = new Date(`${item.date}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const dateLabel = formatDate(item.date);
   const sign = item.type === "income" ? "+" : item.type === "expense" ? "-" : "";
   return <article className="activity-row"><span className={`activity-icon is-${item.type}`}><AppIcon name={item.type === "income" ? "income" : item.type === "expense" ? "expense" : "transfer"} /></span><div><strong>{title}</strong><small><span>{detail}</span><span>{accountLabel}</span><span>{dateLabel}</span></small></div><b className={item.type === "income" ? "positive" : item.type === "expense" ? "negative" : "neutral"}>{sign}{formatMoney(item.amount, profile.currency)}</b></article>;
 }
 
 export function DashboardView() {
   const state = useProfileState();
+  const { formatMoney } = useUserPreferences();
   const [transactionsOpen, setTransactionsOpen] = useState(false);
   const [assetWorkflowOpen, setAssetWorkflowOpen] = useState(false);
   const [budgetWorkflowOpen, setBudgetWorkflowOpen] = useState(false);
@@ -139,6 +142,7 @@ export function HistoryView() {
 }
 
 function MonthCard({ month, profile, open = false }: { month: MonthSummary; profile: FinancialProfile; open?: boolean }) {
+  const { formatMoney } = useUserPreferences();
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [transactionsDialogOpen, setTransactionsDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction>();
@@ -186,6 +190,7 @@ function historyPreviewCategories(month: MonthSummary) {
 }
 
 function HistoryCategoriesDialog({ month, profile, close }: { month: MonthSummary; profile: FinancialProfile; close: () => void }) {
+  const { formatMoney } = useUserPreferences();
   const categories = historyCategories(month);
   const dialogRef = useModalDialog<HTMLElement>(close);
   return <div className="dialog-backdrop history-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }} onTouchMove={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}><section className="confirm-dialog history-category-dialog" role="dialog" aria-modal="true" aria-labelledby={`history-categories-${month.month}`} tabIndex={-1} ref={dialogRef}><div className="repeat-card-heading history-dialog-header"><div><p className="app-eyebrow">{budgetPeriodForKey(profile.budgetStartDay, month.month).label}</p><h2 id={`history-categories-${month.month}`}>All category expenses</h2></div><button className="icon-button" onClick={close} type="button" aria-label="Close category expenses"><AppIcon name="close" /></button></div><div className="history-category-list history-dialog-scroll" tabIndex={0}>{categories.map((category) => { const position = categoryBudgetPosition(category.limit, category.spent); return <article key={category.id}><div className="history-category-heading"><strong>{category.name}</strong><Status value={position.tone} label={position.statusLabel} /></div><div className="history-category-values"><span>Budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(category.spent, profile.currency)}</strong></span><span>{position.differenceLabel}<strong className={position.kind === "over" || position.kind === "unbudgeted" ? "negative" : position.kind === "no-budget" ? "neutral" : "positive"}>{formatMoney(position.difference, profile.currency)}</strong></span></div>{position.percent !== null && <Progress value={position.percent} tone={position.tone === "neutral" ? "good" : position.tone} label={`${category.name} budget used`} />}</article>; })}</div></section></div>;
@@ -228,6 +233,7 @@ function orderedPlanCategories(categories: PlannedCategory[]) {
 }
 
 function MonthlyBudgetPlanner({ month, profile, categories, allocatedCount, budget, spent, hasBudget, manage, viewAll }: { month: string; profile: FinancialProfile; categories: PlannedCategory[]; allocatedCount: number; budget: number; spent: number; hasBudget: boolean; manage: (options?: ManageBudgetOptions) => void; viewAll: () => void }) {
+  const { formatMoney } = useUserPreferences();
   if (!hasBudget) return <EmptyPanel title="No monthly budget yet" text="Create an overall spending limit for this budget period. Category allocations can stay empty." action="Create budget" onAction={() => manage()} />;
   const summary = budgetSummary(profile, month, spent);
   const remaining = summary.remaining ?? 0;
@@ -249,6 +255,7 @@ function MonthlyBudgetPlanner({ month, profile, categories, allocatedCount, budg
 }
 
 function PlanCategoryRow({ category, profile, edit }: { category: PlannedCategory; profile: FinancialProfile; edit?: () => void }) {
+  const { formatMoney } = useUserPreferences();
   const position = categoryBudgetPosition(category.limit, category.spent);
   return <article className={position.kind === "over" || position.kind === "unbudgeted" ? "is-over-budget" : undefined}><div className="plan-category-heading"><strong>{category.name}</strong><div><Status value={position.tone} label={position.statusLabel} />{edit && <button className="text-button" type="button" onClick={edit}>Edit</button>}</div></div><div className="plan-category-values"><span>Budget<strong>{formatMoney(category.limit, profile.currency)}</strong></span><span>Spent<strong>{formatMoney(category.spent, profile.currency)}</strong></span><span>{position.differenceLabel}<strong className={position.kind === "over" || position.kind === "unbudgeted" ? "negative" : position.kind === "no-budget" ? "neutral" : "positive"}>{formatMoney(position.difference, profile.currency)}</strong></span><b>{position.percent === null ? position.statusLabel : `${Math.round(position.percent)}%`}</b></div>{position.percent !== null && <Progress value={position.percent} tone={position.tone === "neutral" ? "good" : position.tone} label={`${category.name} budget used`} />}</article>;
 }
@@ -258,11 +265,12 @@ function AllPlanCategoriesDialog({ categories, profile, edit, close }: { categor
 }
 
 function SavingsGoals({ profile, goals, add }: { profile: FinancialProfile; goals: SavingsGoal[]; add: () => void }) {
+  const { formatMoney, formatDate } = useUserPreferences();
   const [editing, setEditing] = useState<SavingsGoal>();
   const [progress, setProgress] = useState<SavingsGoal>();
   const [deleting, setDeleting] = useState<SavingsGoal>();
   return <>{editing && <SavingsGoalDialog profile={profile} existing={editing} close={() => setEditing(undefined)} />}{progress && <SavingsProgressDialog goal={progress} close={() => setProgress(undefined)} />}{deleting && <SavingsGoalDeleteDialog goal={deleting} close={() => setDeleting(undefined)} />}
-    <section className="goal-card-grid">{goals.map((goal) => { const percent = goal.target ? goal.saved / goal.target * 100 : 0; const remaining = Math.max(0, goal.target - goal.saved); const status = profileSavingsGoalStatus(profile, goal, financialReferenceDate(profile)); return <article className="goal-card-item" key={goal.id}><div className="goal-card-heading"><span className="goal-symbol">{goal.name.slice(0, 1).toUpperCase()}</span><Status value={status.tone} label={status.label} /></div><h2>{goal.name}</h2><div className="goal-amount"><strong>{formatMoney(goal.saved, profile.currency)}</strong><span>of {formatMoney(goal.target, profile.currency)}</span></div><Progress value={percent} tone={status.kind === "behind" ? "watch" : "good"} label={`${goal.name} savings progress`} /><div className="goal-footer"><span>{Math.round(percent)}% complete</span><span>{formatMoney(remaining, profile.currency)} remaining</span></div>{goal.targetDate && <small>Target {new Date(`${goal.targetDate}T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</small>}<div className="transaction-actions goal-actions"><button className="text-button" type="button" onClick={() => setProgress(goal)}>Update progress</button><button className="text-button" type="button" onClick={() => setEditing(goal)}>Edit</button><button className="text-button" type="button" onClick={() => setDeleting(goal)}>Delete</button></div></article>; })}<AddItemCard label="Add savings goal" onClick={add} /></section></>;
+    <section className="goal-card-grid">{goals.map((goal) => { const percent = goal.target ? goal.saved / goal.target * 100 : 0; const remaining = Math.max(0, goal.target - goal.saved); const status = profileSavingsGoalStatus(profile, goal, financialReferenceDate(profile)); return <article className="goal-card-item" key={goal.id}><div className="goal-card-heading"><span className="goal-symbol">{goal.name.slice(0, 1).toUpperCase()}</span><Status value={status.tone} label={status.label} /></div><h2>{goal.name}</h2><div className="goal-amount"><strong>{formatMoney(goal.saved, profile.currency)}</strong><span>of {formatMoney(goal.target, profile.currency)}</span></div><Progress value={percent} tone={status.kind === "behind" ? "watch" : "good"} label={`${goal.name} savings progress`} /><div className="goal-footer"><span>{Math.round(percent)}% complete</span><span>{formatMoney(remaining, profile.currency)} remaining</span></div>{goal.targetDate && <small>Target {formatDate(goal.targetDate)}</small>}<div className="transaction-actions goal-actions"><button className="text-button" type="button" onClick={() => setProgress(goal)}>Update progress</button><button className="text-button" type="button" onClick={() => setEditing(goal)}>Edit</button><button className="text-button" type="button" onClick={() => setDeleting(goal)}>Delete</button></div></article>; })}<AddItemCard label="Add savings goal" onClick={add} /></section></>;
 }
 
 function SavingsGoalDialog({ profile, existing, close }: { profile: FinancialProfile; existing?: SavingsGoal; close: () => void }) {
@@ -282,6 +290,7 @@ function SavingsGoalDeleteDialog({ goal, close }: { goal: SavingsGoal; close: ()
 
 function SavingsProgressDialog({ goal, close }: { goal: SavingsGoal; close: () => void }) {
   const { profile, save } = useFinancialProfile();
+  const { formatMoney } = useUserPreferences();
   const [saved, setSaved] = useState(goal.saved);
   const [error, setError] = useState("");
   if (!profile) return null;
@@ -291,6 +300,7 @@ function SavingsProgressDialog({ goal, close }: { goal: SavingsGoal; close: () =
 
 export function InsightsView() {
   const state = useProfileState();
+  const { formatMoney } = useUserPreferences();
   if (state.content || !state.profile) return state.content;
   const profile = state.profile;
   const month = financialReferenceMonth(profile);

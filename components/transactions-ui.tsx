@@ -9,8 +9,9 @@ import { useFinancialProfile } from "@/components/financial-provider";
 import { MoneyInput } from "@/components/money-input";
 import { ConfirmationDialog } from "@/components/modal-dialog";
 import { useModalDialog } from "@/components/use-modal-dialog";
+import { useUserPreferences } from "@/components/user-preferences-provider";
 import { budgetCategoriesForMonth, budgetSummary, categoryBudgetPosition } from "@/lib/financial-budget";
-import { calculateActualSummary, formatMoney, isValidDate } from "@/lib/financial-calculations";
+import { calculateActualSummary, isValidDate } from "@/lib/financial-calculations";
 import { dateInBudgetPeriod, financialReferenceDate, financialReferenceMonth, financialReferencePeriod } from "@/lib/financial-date";
 import { mutateLedger, normalizeTransaction, transferValidationMessage, UNBUDGETED_CATEGORY } from "@/lib/financial-ledger";
 import { transactionHistoryLabel } from "@/lib/financial-reference-guards";
@@ -24,6 +25,7 @@ const encode = (kind?: string, id?: string) => kind ? `${kind}:${id ?? ""}` : ""
 
 export function TransactionForm({ editing, close }: { editing?: Transaction; close: () => void }) {
   const { profile, save } = useFinancialProfile();
+  const { formatMoney } = useUserPreferences();
   const dialogRef = useModalDialog<HTMLElement>(close);
   const normalizedEditing = profile && editing ? normalizeTransaction(profile, editing) : editing;
   const initialType: UserTransactionType = normalizedEditing?.type === "income" || normalizedEditing?.type === "transfer" ? normalizedEditing.type : "expense";
@@ -79,6 +81,7 @@ export function AddTransactionButton() {
 
 export function TransactionsView() {
   const { profile, ready } = useFinancialProfile();
+  const { formatMoney } = useUserPreferences();
   const [editing, setEditing] = useState<Transaction>();
   const [form, setForm] = useState(false);
   const [allOpen, setAllOpen] = useState(false);
@@ -124,7 +127,7 @@ export function TransactionDeleteDialog({ transaction, close, afterDelete }: { t
 function TransactionMetric({ label, value, detail, icon }: { label: string; value: string; detail: string; icon: "transactions" | "wallet" }) { return <article className="metric-card"><span className="metric-heading"><AppIcon name={icon} />{label}</span><strong>{value}</strong><small>{detail}</small></article>; }
 function TransactionHeroSummary({ kind, label, helper, value }: { kind: "income" | "expense"; label: string; helper: string; value: string }) { return <article className={`transactions-hero-summary is-${kind}`}><span><AppIcon name={kind} />{label}</span><strong>{value}</strong><small>{helper}</small></article>; }
 
-function CategoryBudgetList({ categories, profile }: { categories: Array<{ id: string; name: string; limit: number; spent: number }>; profile: FinancialProfile }) { return <div className="category-progress-list">{categories.map((category) => { const position = categoryBudgetPosition(category.limit, category.spent); return <article key={category.id}><div className="category-progress-heading"><strong>{category.name}</strong><span className={`status-pill is-${position.tone}`}>{position.statusLabel}</span></div>{position.percent !== null && <div className="progress-track"><span className={`is-${position.tone}`} style={{ width: `${Math.min(100, position.percent)}%` }} /></div>}<div className="category-progress-values"><span>Spent<strong>{formatMoney(category.spent, profile.currency)}</strong></span><span>{position.differenceLabel}<strong className={position.kind === "over" || position.kind === "unbudgeted" ? "negative" : position.kind === "no-budget" ? "neutral" : "positive"}>{formatMoney(position.difference, profile.currency)}</strong></span><b>{position.percent === null ? position.statusLabel : `${Math.round(position.percent)}%`}</b></div></article>; })}</div>; }
+function CategoryBudgetList({ categories, profile }: { categories: Array<{ id: string; name: string; limit: number; spent: number }>; profile: FinancialProfile }) { const { formatMoney } = useUserPreferences(); return <div className="category-progress-list">{categories.map((category) => { const position = categoryBudgetPosition(category.limit, category.spent); return <article key={category.id}><div className="category-progress-heading"><strong>{category.name}</strong><span className={`status-pill is-${position.tone}`}>{position.statusLabel}</span></div>{position.percent !== null && <div className="progress-track"><span className={`is-${position.tone}`} style={{ width: `${Math.min(100, position.percent)}%` }} /></div>}<div className="category-progress-values"><span>Spent<strong>{formatMoney(category.spent, profile.currency)}</strong></span><span>{position.differenceLabel}<strong className={position.kind === "over" || position.kind === "unbudgeted" ? "negative" : position.kind === "no-budget" ? "neutral" : "positive"}>{formatMoney(position.difference, profile.currency)}</strong></span><b>{position.percent === null ? position.statusLabel : `${Math.round(position.percent)}%`}</b></div></article>; })}</div>; }
 
 function AllCategoriesDialog({ close, categories, profile }: { close: () => void; categories: Array<{ id: string; name: string; limit: number; spent: number }>; profile: FinancialProfile }) {
   const dialogRef = useModalDialog<HTMLElement>(close);
@@ -147,8 +150,9 @@ function transactionDetails(profile: FinancialProfile, item: Transaction) {
 }
 
 function TransactionListRow({ item, profile, actions, showIcon = true }: { item: Transaction; profile: FinancialProfile; actions?: ReactNode; showIcon?: boolean }) {
+  const { formatMoney, formatDate } = useUserPreferences();
   const detail = transactionDetails(profile, item);
-  const date = new Date(`${item.date}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const date = formatDate(item.date);
   return <article className={`transaction-item transaction-row-card${showIcon ? "" : " without-icon"}`}>{showIcon && <span className={`activity-icon is-${item.type}`}><AppIcon name={item.type === "income" ? "income" : item.type === "expense" ? "expense" : "transfer"} /></span>}<div><strong>{detail.title}</strong><small><span>{detail.category}</span><span>{detail.account}</span><span>{date}</span></small></div><b className={item.type === "income" ? "positive" : item.type === "expense" ? "negative" : "neutral"}>{item.type === "income" ? "+" : item.type === "expense" ? "-" : ""}{formatMoney(item.amount, profile.currency)}</b>{actions}</article>;
 }
 

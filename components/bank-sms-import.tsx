@@ -6,7 +6,7 @@ import { AppIcon } from "@/components/app-icons";
 import { CategorySelectOptions } from "@/components/category-select-options";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { ModalDialog } from "@/components/modal-dialog";
-import { formatMoney } from "@/lib/financial-calculations";
+import { useUserPreferences } from "@/components/user-preferences-provider";
 import { loadFinancialImportFingerprints } from "@/lib/cloud-financial-repository";
 import { parseBankSms } from "@/lib/sms-import/coordinator";
 import { applySmsImportBatch, decodeSmsEndpoint, prepareSmsReview, smsProposalReadiness } from "@/lib/sms-import/review";
@@ -48,8 +48,9 @@ function ProposalEditor({ item, profile, update }: { item: SmsImportReviewItem; 
 }
 
 function ProposalCard({ item, profile, expanded, toggle, update }: { item: SmsImportReviewItem; profile: NonNullable<ReturnType<typeof useFinancialProfile>["profile"]>; expanded: boolean; toggle: () => void; update: (patch: Partial<SmsImportReviewItem>) => void }) {
+  const { formatMoney, formatDate } = useUserPreferences();
   const proposal = item.proposal; const readiness = smsProposalReadiness(profile, item); const error = readiness.error; const resolved = readiness.status === "ready";
-  const date = proposal.date ? new Date(`${proposal.date}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "Date unavailable";
+  const date = proposal.date ? formatDate(proposal.date) : "Date unavailable";
   const selectedValue = item.transactionType === "income" ? item.destination : item.transactionType === "expense" ? item.source : item.source;
   const selected = decodeSmsEndpoint(selectedValue); const instrument = selected.kind === "debit" ? profile.debitCards?.find((card) => card.id === selected.id)?.name : selected.kind === "account" ? profile.accounts.find((account) => account.id === selected.id)?.name : selected.kind === "cash" ? "Cash" : null;
   return <article className={`sms-proposal is-${readiness.status}${item.included ? "" : " is-excluded"}`}>

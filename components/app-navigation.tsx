@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SignOutButton } from "@/components/auth-forms";
-import { AppIcon } from "@/components/app-icons";
+import { AppIcon, type IconName } from "@/components/app-icons";
 
 const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
@@ -51,6 +51,7 @@ export function AppNavigation() {
           {navigation.map((item) => <AppNavLink key={item.href} href={item.href} label={item.label} icon={item.icon} active={pathname === item.href} close={closeForRoute} />)}
         </nav>
         <div className="app-sidebar-footer">
+          <nav aria-label="Settings navigation"><AppNavLink href="/settings" label="Settings" icon="settings" active={pathname === "/settings"} close={closeForRoute} /></nav>
           <SignOutButton />
         </div>
       </aside>
@@ -60,6 +61,6 @@ export function AppNavigation() {
   );
 }
 
-function AppNavLink({ href, label, icon, active, close }: { href: string; label: string; icon: (typeof navigation)[number]["icon"]; active: boolean; close: (keyboard: boolean) => void }) {
+function AppNavLink({ href, label, icon, active, close }: { href: string; label: string; icon: IconName; active: boolean; close: (keyboard: boolean) => void }) {
   return <Link href={href} className={`app-nav-link${active ? " is-active" : ""}`} aria-label={label} aria-current={active ? "page" : undefined} onClick={(event) => close(event.detail === 0)}><AppIcon name={icon} /><span>{label}</span></Link>;
 }

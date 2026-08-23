@@ -7,7 +7,8 @@ import { FinancialItemForm, type FinancialItem } from "@/components/financial-it
 import { useFinancialProfile, type FinancialSave } from "@/components/financial-provider";
 import { MoneyInput } from "@/components/money-input";
 import { useModalDialog } from "@/components/use-modal-dialog";
-import { calculateActualSummary, formatMoney } from "@/lib/financial-calculations";
+import { useUserPreferences } from "@/components/user-preferences-provider";
+import { calculateActualSummary } from "@/lib/financial-calculations";
 import { financialReferenceDate, financialReferenceMonth } from "@/lib/financial-date";
 import { displayCountry } from "@/lib/financial-institutions";
 import { hasLinkedAccountActivity, hasLinkedCardActivity, removalGuardMessage } from "@/lib/financial-reference-guards";
@@ -52,6 +53,7 @@ function displayBankName(value?: string) {
 
 export function AccountsCardsView({ initialAction }: { initialAction?: "add" }) {
   const { profile, ready, issue, save } = useFinancialProfile();
+  const { formatMoney } = useUserPreferences();
   const [editor, setEditor] = useState<Editor>();
   const [detail, setDetail] = useState<Detail>();
   const [deleting, setDeleting] = useState<DeleteTarget>();
@@ -137,6 +139,7 @@ export function AccountsCardsView({ initialAction }: { initialAction?: "add" }) 
 }
 
 function CashSection({ balance, profile, edit }: { balance: number; profile: FinancialProfile; edit: () => void }) {
+  const { formatMoney } = useUserPreferences();
   return <section className="accounts-section-row cash-section-row" aria-labelledby="cash-section-title"><div className="cash-section-content"><div><p className="app-eyebrow">Cash</p><h2 id="cash-section-title">Cash</h2></div><div className="cash-section-balance"><span>Cash balance</span><strong>{formatMoney(balance, profile.currency)}</strong></div><button className="app-button app-button-secondary" type="button" onClick={edit}><AppIcon name="edit" />Edit balance</button></div></section>;
 }
 
@@ -158,6 +161,7 @@ function ExpandableSection({ title, eyebrow, metrics, children }: { title: strin
 }
 
 function AccountCard({ account, balance, profile, edit, remove }: { account: Account; balance: number; profile: FinancialProfile; edit: () => void; remove: () => void }) {
+  const { formatMoney } = useUserPreferences();
   const currency = cardCurrency(account.currency, profile);
   const type = account.type === "current" ? "Current" : account.type;
   const eyebrow = account.purpose ? `${type} / ${account.purpose}` : account.type === "current" ? "Current / checking" : account.type;
@@ -165,6 +169,7 @@ function AccountCard({ account, balance, profile, edit, remove }: { account: Acc
 }
 
 function PaymentCard({ kind, name, purpose, country, currency, lastFour, linkedFunds, available, owed, open, edit, remove }: { kind: "debit" | "credit"; name: string; purpose?: string; country?: string; currency: Currency; lastFour?: string; linkedFunds?: string; available?: string; owed?: string; open: () => void; edit: () => void; remove: () => void }) {
+  const { formatMoney } = useUserPreferences();
   const keyboard = (event: React.KeyboardEvent<HTMLElement>) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } };
   const eyebrow = purpose ? `${kind} / ${purpose}` : kind;
   return <article className={`payment-card action-card is-${kind}`} role="button" tabIndex={0} aria-label={`Open ${displayBankName(name)} ${kind} card details`} onClick={open} onKeyDown={keyboard}><div className="payment-card-top"><span title={eyebrow}>{eyebrow}</span><CardActions edit={edit} remove={remove} label={name} stopPropagation /></div><div className="payment-card-brand"><AppIcon name="card" /><strong>{displayBankName(name)}</strong></div>{masked(lastFour) && <p className="payment-card-number">{masked(lastFour)}</p>}<div className="payment-card-footer"><span className="card-location">{displayCountry(country)} · {currency}</span><div className="card-money-stack">{kind === "debit" ? linkedFunds ? <CardMoney label="Linked account funds" value={linkedFunds} /> : <span className="card-unlinked">Not linked</span> : <><CardMoney label="Owed" value={owed || formatMoney(0, currency)} /><CardMoney label="Available credit" value={available || formatMoney(0, currency)} /></>}</div></div></article>;
@@ -221,6 +226,7 @@ function EditorDialog({ editor, profile, save, close }: { editor: Editor; profil
 }
 
 function CardDetailDialog({ detail, profile, accounts, cards, availableCredit, close, edit }: { detail: Detail; profile: FinancialProfile; accounts: Record<string, number>; cards: Record<string, number>; availableCredit: Record<string, number>; close: () => void; edit: () => void }) {
+  const { formatMoney } = useUserPreferences();
   if (detail.kind === "debit") {
     const card = detail.value;
     const linked = profile.accounts.find((account) => account.id === card.linkedAccountId);

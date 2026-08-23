@@ -47,7 +47,7 @@ function migrationProfile(): FinancialProfile {
 test("cloud state maps the complete Phase 2 profile without changing financial meaning", () => {
   const profile = migrationProfile();
   assert.equal(isFinancialProfile(profile), true);
-  const parsed = parseCloudStateRow([{ household_id: "household-a", household_name: "My Household", member_role: "owner", profile_data: JSON.parse(JSON.stringify(profile)), revision: 4, initialized_at: "2026-08-22T00:00:00Z", migrated_at: "2026-08-22T00:00:00Z" }]);
+  const parsed = parseCloudStateRow([{ household_id: "household-a", household_name: "My Household", member_role: "owner", member_count: 1, profile_data: JSON.parse(JSON.stringify(profile)), revision: 4, initialized_at: "2026-08-22T00:00:00Z", migrated_at: "2026-08-22T00:00:00Z" }]);
   assert.deepEqual(parsed.profile, profile);
   assert.equal(parsed.profile?.budgetStartDay, 25);
   assert.equal(parsed.profile?.cashBalance, 20000);

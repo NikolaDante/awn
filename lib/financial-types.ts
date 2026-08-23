@@ -46,6 +46,8 @@ export type FinancialProfile = {
   debitCards?: DebitCard[];
   creditCards: CreditCard[];
   categoryBudgets: CategoryBudget[];
+  /** Household-owned custom category suggestions that may exist without a budget allocation. */
+  customCategories?: string[];
   savingsGoals: SavingsGoal[];
   onboarding: { currentStep: number; completed: boolean };
   createdAt: string;
@@ -57,5 +59,5 @@ export const newLocalId = () => typeof crypto !== "undefined" && "randomUUID" in
 
 export function createFinancialProfile(): FinancialProfile {
   const now = new Date().toISOString();
-  return { version: FINANCIAL_PROFILE_VERSION, country: "United Arab Emirates", currency: "AED", budgetStartDay: 1, cashBalance: 0, incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], monthlyBudgets: [], savingsGoals: [], onboarding: { currentStep: 0, completed: false }, createdAt: now, updatedAt: now, transactions: [] };
+  return { version: FINANCIAL_PROFILE_VERSION, country: "United Arab Emirates", currency: "AED", budgetStartDay: 1, cashBalance: 0, incomeSources: [], accounts: [], debitCards: [], creditCards: [], categoryBudgets: [], customCategories: [], monthlyBudgets: [], savingsGoals: [], onboarding: { currentStep: 0, completed: false }, createdAt: now, updatedAt: now, transactions: [] };
 }
