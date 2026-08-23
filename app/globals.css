@@ -1659,8 +1659,13 @@
 
 .mobile-add-options {
   display:grid!important;
+  grid-template-columns:minmax(0,1fr);
+  justify-content:stretch;
+  align-items:stretch;
   gap:10px!important;
-  margin:0!important;
+  width:100%;
+  max-width:100%;
+  margin:0 auto!important;
 }
 
 .mobile-add-options > button {

@@ -54,6 +54,11 @@ test("quick Add chooser reuses the existing transaction and SMS workflows", () =
 
 test("quick Add option rows keep identical geometry and non-resizing focus", () => {
   const focusBlock = css.match(/\.mobile-add-options > button:focus-visible \{([\s\S]*?)\}/)?.[1] ?? "";
+  assert.match(css, /\.mobile-add-options \{[\s\S]*?grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /\.mobile-add-options \{[\s\S]*?justify-content:stretch/);
+  assert.match(css, /\.mobile-add-options \{[\s\S]*?width:100%/);
+  assert.match(css, /\.mobile-add-options \{[\s\S]*?max-width:100%/);
+  assert.match(css, /\.mobile-add-options \{[\s\S]*?margin:0 auto!important/);
   assert.match(css, /\.mobile-add-options > button \{[\s\S]*?grid-template-columns:42px minmax\(0,1fr\) 18px/);
   assert.match(css, /\.mobile-add-options > button \{[\s\S]*?height:76px/);
   assert.match(css, /\.mobile-add-options > button \{[\s\S]*?padding:13px 14px/);
