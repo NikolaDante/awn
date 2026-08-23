@@ -1721,9 +1721,9 @@
 .sms-proposal-title { margin:0; font-weight:750; color:var(--awn-ink); }
 .sms-proposal-main strong { font-size:1.08rem; }
 .sms-proposal-main small { color:var(--awn-muted); line-height:1.35; }
-.sms-proposal-warning { margin:16px 0; padding:14px 16px; }
+.confirm-dialog .sms-proposal-warning { margin:16px 0; padding:14px 16px; }
 .sms-proposal-actions { display:flex; gap:16px; margin-top:12px; }
-.sms-proposal-warning + .sms-proposal-actions { margin-top:0; }
+.confirm-dialog .sms-proposal-warning + .sms-proposal-actions { margin-top:0; }
 .sms-proposal-actions .text-button:disabled { cursor:not-allowed; opacity:.55; }
 .sms-import-editor { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:16px; padding-top:16px; border-top:1px solid var(--awn-border); }
 .sms-import-note { grid-column:1 / -1; }
