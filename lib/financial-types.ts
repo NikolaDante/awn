@@ -12,7 +12,14 @@ export type CreditCard = { id: string; name: string; limit: Amount; owed: Amount
 export type CategoryBudget = { id: string; name: string; limit: Amount; month?: string };
 export type MonthlyBudgetSnapshot = { month: string; limit: Amount };
 export type SavingsGoal = { id: string; name: string; target: Amount; saved: Amount; contribution: Amount; startDate?: string; targetDate?: string; priority: number };
-export type TransactionBase = { id: string; amount: Amount; date: string; note?: string; createdAt: string; updatedAt: string; createdByUserId?: string; updatedByUserId?: string };
+export type TransactionImportMetadata = {
+  origin: "sms";
+  bank: "fab";
+  messageType: string;
+  fingerprint: string;
+  observedBalanceAfter?: Amount;
+};
+export type TransactionBase = { id: string; amount: Amount; date: string; note?: string; import?: TransactionImportMetadata; createdAt: string; updatedAt: string; createdByUserId?: string; updatedByUserId?: string };
 export type AssetSourceKind = "cash" | "account";
 export type ExpenseSourceKind = AssetSourceKind | "debit" | "credit";
 export type TransferDestinationKind = AssetSourceKind | "credit";

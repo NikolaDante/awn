@@ -5,6 +5,7 @@ import { financialReferenceMonth } from "@/lib/financial-date";
 import { backupFinancialProfileForCloudMigration, loadFinancialProfile } from "@/lib/financial-storage";
 import { isFinancialProfile } from "@/lib/financial-storage-core";
 import type { FinancialProfile } from "@/lib/financial-types";
+import type { FinancialImportRecord } from "@/lib/sms-import/types";
 import { createClient } from "@/lib/supabase/client";
 
 export type CloudFinancialLoadResult = CloudFinancialState & { issue: string | null; migratedLocalProfile: boolean };
@@ -23,7 +24,7 @@ export class CloudFinancialRepositoryError extends Error {
 
 function repositoryError(error: { code?: string; message?: string } | null, fallback: string) {
   const message = error?.message ?? fallback;
-  const known = ["revision_conflict", "household_access_denied", "invalid_financial_profile", "authentication_required"]
+  const known = ["revision_conflict", "household_access_denied", "invalid_financial_profile", "authentication_required", "import_duplicate", "invalid_import_record"]
     .find((code) => message.includes(code));
   return new CloudFinancialRepositoryError(known ?? error?.code ?? "cloud_unavailable", message);
 }
@@ -70,6 +71,30 @@ export async function saveCloudFinancialProfile(
     p_migration_identifier: migrationIdentifier ?? null,
   });
   if (error) throw repositoryError(error, "cloud_save_failed");
+  return parseSaveRow(data, state.householdName, state.memberRole);
+}
+
+export async function loadFinancialImportFingerprints(householdId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("financial_import_fingerprints").select("fingerprint").eq("household_id", householdId);
+  if (error) throw repositoryError(error, "import_fingerprints_load_failed");
+  return new Set((data ?? []).flatMap((row) => typeof row.fingerprint === "string" ? [row.fingerprint] : []));
+}
+
+export async function saveCloudFinancialImport(
+  state: Pick<CloudFinancialState, "householdId" | "householdName" | "memberRole" | "revision">,
+  profile: FinancialProfile,
+  imports: FinancialImportRecord[],
+) {
+  if (!isFinancialProfile(profile)) throw new CloudFinancialRepositoryError("invalid_financial_profile", "invalid_financial_profile");
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("awn_import_financial_transactions", {
+    p_household_id: state.householdId,
+    p_expected_revision: state.revision,
+    p_profile_data: profile as unknown as Record<string, unknown>,
+    p_imports: imports as unknown as Record<string, unknown>[],
+  });
+  if (error) throw repositoryError(error, "cloud_import_failed");
   return parseSaveRow(data, state.householdName, state.memberRole);
 }
 
