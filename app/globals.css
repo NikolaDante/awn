@@ -1649,6 +1649,10 @@
   display:none;
 }
 
+.mobile-navigation-card {
+  display:none;
+}
+
 .mobile-add-sheet {
   width:min(100%,480px);
 }
@@ -6762,5 +6766,136 @@
       radial-gradient(circle at 82% 12%, rgba(255,255,255,.2), transparent 18rem),
       linear-gradient(135deg,#171b22 0%,#2e2864 54%,var(--awn-violet) 130%);
     box-shadow:0 22px 56px rgba(16,20,24,.17);
+  }
+}
+
+/* Mobile UX Polish v2: phone menu uses a floating card, while sheets share one strict content column. */
+@media (max-width:640px) {
+  .app-shell .app-sidebar.is-open {
+    display:none;
+  }
+
+  .app-shell:has(.settings-page) .app-workspace {
+    padding-bottom:calc(118px + env(safe-area-inset-bottom));
+  }
+
+  .nav-scrim {
+    z-index:23;
+    background:rgba(11,14,18,.42);
+  }
+
+  .app-mobile-action-bar {
+    z-index:24;
+  }
+
+  .mobile-action-secondary.is-active {
+    background:rgba(102,92,246,.28);
+    color:#fff;
+    box-shadow:inset 0 0 0 1px rgba(217,214,255,.18);
+  }
+
+  .mobile-navigation-card {
+    position:fixed;
+    z-index:26;
+    right:16px;
+    bottom:calc(86px + env(safe-area-inset-bottom));
+    left:16px;
+    display:block;
+    width:auto;
+    max-width:420px;
+    margin-inline:auto;
+    padding:10px;
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:24px;
+    background:rgba(16,20,24,.96);
+    box-shadow:0 24px 64px rgba(16,20,24,.38);
+    backdrop-filter:blur(18px);
+  }
+
+  .mobile-navigation-card:focus {
+    outline:0;
+  }
+
+  .mobile-navigation-list {
+    display:grid;
+    gap:4px;
+  }
+
+  .mobile-navigation-card .app-nav-link {
+    min-height:48px;
+    padding:10px 12px;
+    border-radius:14px;
+    color:rgba(255,255,255,.68);
+  }
+
+  .mobile-navigation-card .app-nav-link > span:first-child {
+    width:20px;
+    color:#a9a4ff;
+  }
+
+  .mobile-navigation-card .app-nav-link.is-active {
+    background:#292d33;
+    color:#fff;
+    box-shadow:inset 0 0 0 1px rgba(153,147,255,.2);
+  }
+
+  .mobile-navigation-card .app-nav-link.is-active > span:first-child {
+    color:#fff;
+  }
+
+  .confirm-dialog.transaction-form {
+    --transaction-mobile-inset:20px;
+    width:100%;
+    max-height:min(92svh,820px);
+    border-radius:26px;
+  }
+
+  .transaction-form > .transaction-form-header {
+    padding:22px var(--transaction-mobile-inset) 16px;
+  }
+
+  .transaction-form > .transaction-type {
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    width:auto;
+    margin:0 var(--transaction-mobile-inset) 16px;
+    overflow:visible;
+  }
+
+  .transaction-form > .transaction-type button {
+    min-width:0;
+    width:100%;
+    padding-inline:0;
+  }
+
+  .transaction-form > .transaction-form-body {
+    padding:0 var(--transaction-mobile-inset);
+  }
+
+  .transaction-form .transaction-fields {
+    grid-template-columns:1fr;
+    gap:16px;
+  }
+
+  .transaction-form .form-field {
+    gap:8px;
+  }
+
+  .transaction-form .form-field input,
+  .transaction-form .form-field select {
+    width:100%;
+  }
+
+  .transaction-form > .confirm-dialog-actions {
+    display:flex;
+    flex-direction:column-reverse;
+    gap:8px;
+    margin-top:14px;
+    padding:16px var(--transaction-mobile-inset) calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .transaction-form > .confirm-dialog-actions .app-button {
+    width:100%;
+    min-height:46px;
   }
 }

@@ -8,6 +8,7 @@ import { AppIcon, type IconName } from "@/components/app-icons";
 import { BankSmsImportDialog } from "@/components/bank-sms-import";
 import { ModalDialog } from "@/components/modal-dialog";
 import { TransactionForm } from "@/components/transactions-ui";
+import { containModalFocus } from "@/components/use-modal-dialog";
 
 const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
@@ -25,6 +26,7 @@ export function AppNavigation() {
   const addButton = useRef<HTMLButtonElement>(null);
   const lastMenuButton = useRef<HTMLButtonElement | null>(null);
   const drawer = useRef<HTMLElement>(null);
+  const mobileMenu = useRef<HTMLElement>(null);
   const focusPageAfterRoute = useRef(false);
 
   useEffect(() => {
@@ -35,8 +37,15 @@ export function AppNavigation() {
 
   useEffect(() => {
     if (!open) return;
-    requestAnimationFrame(() => drawer.current?.querySelector<HTMLElement>(".app-nav-link")?.focus({ preventScroll: true }));
+    requestAnimationFrame(() => {
+      const phoneMenu = window.matchMedia("(max-width: 640px)").matches ? mobileMenu.current : null;
+      (phoneMenu ?? drawer.current)?.querySelector<HTMLElement>(".app-nav-link")?.focus({ preventScroll: true });
+    });
     const escape = (event: KeyboardEvent) => {
+      if (event.key === "Tab" && mobileMenu.current && window.matchMedia("(max-width: 640px)").matches) {
+        containModalFocus(event, mobileMenu.current, document.activeElement);
+        return;
+      }
       if (event.key !== "Escape") return;
       event.preventDefault();
       setOpen(false);
@@ -68,9 +77,15 @@ export function AppNavigation() {
       <header className="app-mobile-header"><Link className="app-wordmark" href="/dashboard" aria-label="AWN dashboard"><span className="wordmark-mark" aria-hidden="true">a</span><span>awn</span></Link><button className="mobile-menu-button" type="button" aria-label={open ? "Close navigation" : "Open navigation"} aria-expanded={open} aria-controls="app-navigation-drawer" onClick={(event) => toggleMenu(event.currentTarget)}><AppIcon name={open ? "close" : "menu"} /></button></header>
       <div className="app-mobile-action-bar" aria-label="Quick actions">
         <button ref={addButton} className="mobile-action-primary" type="button" onClick={() => setAction("chooser")}><AppIcon name="plus" /><span>Add</span></button>
-        <button className="mobile-action-secondary" type="button" aria-label={open ? "Close navigation menu" : "Open navigation menu"} aria-expanded={open} aria-controls="app-navigation-drawer" onClick={(event) => toggleMenu(event.currentTarget)}><AppIcon name="menu" /><span>Menu</span></button>
+        <button className={`mobile-action-secondary${open ? " is-active" : ""}`} type="button" aria-label={open ? "Close navigation menu" : "Open navigation menu"} aria-expanded={open} aria-controls="app-mobile-navigation-card" onClick={(event) => toggleMenu(event.currentTarget)}><AppIcon name="menu" /><span>Menu</span></button>
       </div>
       {open && <button className="nav-scrim" type="button" aria-label="Close navigation" onClick={dismissMenu} />}
+      {open && <section ref={mobileMenu} id="app-mobile-navigation-card" className="mobile-navigation-card" role="dialog" aria-modal="true" aria-label="Application navigation" tabIndex={-1}>
+        <nav className="mobile-navigation-list">
+          {navigation.map((item) => <AppNavLink key={item.href} href={item.href} label={item.label} icon={item.icon} active={pathname === item.href} close={closeForRoute} />)}
+          <AppNavLink href="/settings" label="Settings" icon="settings" active={pathname === "/settings"} close={closeForRoute} />
+        </nav>
+      </section>}
       {action === "chooser" && <MobileAddChooser close={closeAction} choose={setAction} />}
       {action === "transaction" && <TransactionForm close={closeAction} />}
       {action === "sms" && <BankSmsImportDialog close={closeAction} />}

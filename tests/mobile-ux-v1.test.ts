@@ -13,11 +13,31 @@ test("mobile shell exposes one persistent Add and Menu control pair", () => {
   assert.match(navigation, /className="app-mobile-action-bar"/);
   assert.match(navigation, /<span>Add<\/span>/);
   assert.match(navigation, /<span>Menu<\/span>/);
-  assert.match(navigation, /aria-controls="app-navigation-drawer"/);
+  assert.match(navigation, /aria-controls="app-mobile-navigation-card"/);
+  assert.match(navigation, /aria-expanded=\{open\}/);
   assert.match(navigation, /lastMenuButton\.current\?\.focus/);
   assert.match(navigation, /addButton\.current\?\.focus/);
   assert.match(css, /body:has\(\.app-dialog-backdrop\) \.app-mobile-action-bar/);
   assert.match(css, /padding-bottom:calc\(118px \+ env\(safe-area-inset-bottom\)\)/);
+});
+
+test("phone menu uses a floating card instead of the side drawer presentation", () => {
+  assert.match(navigation, /id="app-mobile-navigation-card"/);
+  assert.match(navigation, /className="mobile-navigation-card"/);
+  assert.match(navigation, /containModalFocus\(event, mobileMenu\.current, document\.activeElement\)/);
+  assert.match(css, /\.app-shell \.app-sidebar\.is-open \{[\s\S]*?display:none/);
+  assert.match(css, /\.mobile-navigation-card \{[\s\S]*?bottom:calc\(86px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(css, /\.app-mobile-action-bar \{[\s\S]*?z-index:24/);
+});
+
+test("floating phone menu contains the expected routes and active state", () => {
+  for (const label of ["Dashboard", "Transactions", "History", "Cards & Accounts", "Plan", "Insights", "Settings"]) {
+    assert.match(navigation, new RegExp(`label: "${label}"|label="${label}"`));
+  }
+  assert.match(navigation, /active=\{pathname === item\.href\}/);
+  assert.match(navigation, /active=\{pathname === "\/settings"\}/);
+  assert.match(navigation, /aria-current=\{active \? "page" : undefined\}/);
+  assert.match(css, /\.mobile-navigation-card \.app-nav-link\.is-active \{[\s\S]*?background:#292d33/);
 });
 
 test("quick Add chooser reuses the existing transaction and SMS workflows", () => {
@@ -32,12 +52,20 @@ test("quick Add chooser reuses the existing transaction and SMS workflows", () =
 test("phone transaction and SMS dialogs use constrained bottom-sheet geometry", () => {
   assert.match(css, /align-items:end/);
   assert.match(css, /max-height:min\(92svh,820px\)/);
-  assert.match(css, /\.transaction-form > \.transaction-type \{[\s\S]*?grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.transaction-form > \.transaction-type \{[\s\S]*?grid-template-columns:repeat\(3,1fr\)/);
   assert.match(css, /\.transaction-form \.transaction-fields,[\s\S]*?grid-template-columns:1fr/);
   assert.match(css, /\.sms-import-textarea \{[\s\S]*?min-height:220px;[\s\S]*?max-height:240px/);
   assert.match(sms, /AWN will review them before importing/);
   assert.match(sms, /Currently supported: FAB/);
   assert.match(sms, /sms-import-footer/);
+});
+
+test("Add Transaction mobile sheet shares one content inset", () => {
+  assert.match(css, /--transaction-mobile-inset:20px/);
+  assert.match(css, /\.transaction-form > \.transaction-form-header \{[\s\S]*?padding:22px var\(--transaction-mobile-inset\) 16px/);
+  assert.match(css, /\.transaction-form > \.transaction-type \{[\s\S]*?margin:0 var\(--transaction-mobile-inset\) 16px/);
+  assert.match(css, /\.transaction-form > \.transaction-form-body \{[\s\S]*?padding:0 var\(--transaction-mobile-inset\)/);
+  assert.match(css, /\.transaction-form > \.confirm-dialog-actions \{[\s\S]*?padding:16px var\(--transaction-mobile-inset\) calc\(18px \+ env\(safe-area-inset-bottom\)\)/);
 });
 
 test("Transactions separates phone period KPIs without changing its calculations", () => {
