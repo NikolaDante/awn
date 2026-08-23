@@ -1,5 +1,11 @@
 # AWN Preview Deployment
 
+## Permanent testing URL
+
+AWN has one user-facing testing URL: `https://awn-preview-awn4.vercel.app`.
+
+For every approved Preview release: deploy a fresh immutable Preview, verify it internally, repoint this same alias to the verified deployment, verify the stable alias, and give the user only the stable URL. Immutable deployment URLs are deployment records, not user-facing testing links.
+
 ## Environment
 
 Vercel Preview requires:
@@ -14,12 +20,11 @@ The social-auth flags are public readiness switches, not provider credentials. L
 
 ## Supabase Auth URLs
 
-Add the deployed Preview origin and these callback URLs to Supabase Auth URL Configuration:
+Use the permanent testing URL as the Supabase Site URL and allow:
 
-- `https://<preview-domain>/auth/callback`
-- `https://<preview-domain>/auth/reset`
+- `https://awn-preview-awn4.vercel.app/auth/callback**`
 
-If the project intentionally trusts every Vercel Preview deployment, configure an appropriate `*.vercel.app` redirect wildcard according to the team’s Supabase policy. Prefer an exact deployment or stable branch-domain allow-list when possible.
+Keep required localhost callbacks for development. Do not accumulate immutable Preview hosts in Supabase or Google OAuth configuration. Google uses the stable AWN origin while its provider redirect URI remains the Supabase `/auth/v1/callback` endpoint.
 
 ## Preview safety
 
