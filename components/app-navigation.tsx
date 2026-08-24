@@ -85,6 +85,9 @@ export function AppNavigation() {
           {navigation.map((item) => <AppNavLink key={item.href} href={item.href} label={item.label} icon={item.icon} active={pathname === item.href} close={closeForRoute} />)}
           <AppNavLink href="/settings" label="Settings" icon="settings" active={pathname === "/settings"} close={closeForRoute} />
         </nav>
+        <div className="mobile-navigation-footer">
+          <SignOutButton variant="mobile" redirectTo="/auth/sign-in" onSignedOut={() => setOpen(false)} />
+        </div>
       </section>}
       {action === "chooser" && <MobileAddChooser close={closeAction} choose={setAction} />}
       {action === "transaction" && <TransactionForm close={closeAction} />}

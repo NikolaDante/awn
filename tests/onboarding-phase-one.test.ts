@@ -10,6 +10,7 @@ import { createFinancialProfile, type Account, type CreditCard, type DebitCard, 
 
 const root = process.cwd();
 const onboardingSource = readFileSync(join(root, "components/onboarding-flow.tsx"), "utf8");
+const css = readFileSync(join(root, "app/globals.css"), "utf8");
 const categoryBudgetSource = readFileSync(join(root, "components/category-budget-form.tsx"), "utf8");
 const financialItemSource = readFileSync(join(root, "components/financial-item-form.tsx"), "utf8");
 const savingsGoalSource = readFileSync(join(root, "components/savings-goal-form.tsx"), "utf8");
@@ -35,6 +36,15 @@ test("stored and linked onboarding steps resume without changing entered profile
   assert.equal(requestedOnboardingStep("accounts", 4), 2);
   assert.equal(requestedOnboardingStep("income", 4), 1);
   assert.deepEqual(profile.accounts, before);
+});
+
+test("onboarding step headings keep programmatic focus without a visible halo", () => {
+  assert.match(onboardingSource, /heading\.current\?\.focus\(\)/);
+  assert.match(onboardingSource, /<h1 tabIndex=\{-1\} ref=\{heading\}>/);
+  const focusBlock = css.match(/\.onboarding-card h1:focus \{([\s\S]*?)\}/)?.[1] ?? "";
+  assert.match(focusBlock, /outline:0/);
+  assert.match(focusBlock, /box-shadow:none/);
+  assert.doesNotMatch(focusBlock, /rgba\(183,178,255/);
 });
 
 test("optional add forms only persist on save and expose a cancel path", () => {

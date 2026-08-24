@@ -46,6 +46,15 @@ test("floating phone menu contains the expected routes and active state", () => 
   assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active svg \{[\s\S]*?color:#fff/);
 });
 
+test("floating phone menu exposes the shared sign-out action below routes", () => {
+  assert.match(navigation, /<SignOutButton variant="mobile" redirectTo="\/auth\/sign-in" onSignedOut=\{\(\) => setOpen\(false\)\}/);
+  assert.match(navigation, /className="mobile-navigation-footer"/);
+  assert.match(css, /\.mobile-navigation-footer \{[\s\S]*?border-top:1px solid rgba\(255,255,255,\.12\)/);
+  assert.match(css, /\.mobile-sign-out-button \{[\s\S]*?grid-template-columns:24px minmax\(0,1fr\)/);
+  assert.match(css, /\.mobile-sign-out-button \{[\s\S]*?height:48px/);
+  assert.match(css, /\.mobile-sign-out-button:focus-visible \{[\s\S]*?outline:2px solid #d9d6ff/);
+});
+
 test("quick Add chooser reuses the existing transaction and SMS workflows", () => {
   assert.match(navigation, /<MobileAddChooser/);
   assert.match(navigation, /<TransactionForm close=/);
