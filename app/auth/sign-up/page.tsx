@@ -2,7 +2,8 @@ import { AuthForm } from "@/components/auth-forms";
 import { AuthenticatedAuthPageRedirect } from "@/components/auth-page-redirect";
 import { optionalAuthenticatedUserId } from "@/lib/auth/server-user";
 
-export default async function SignUpPage() {
+export default async function SignUpPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const ownerId = await optionalAuthenticatedUserId();
-  return ownerId ? <AuthenticatedAuthPageRedirect ownerId={ownerId} /> : <AuthForm mode="sign-up" />;
+  const { next } = await searchParams;
+  return ownerId ? <AuthenticatedAuthPageRedirect ownerId={ownerId} next={next} /> : <AuthForm mode="sign-up" />;
 }

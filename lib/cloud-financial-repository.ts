@@ -34,15 +34,15 @@ function normalizeCloudProfile(profile: FinancialProfile) {
   return normalizeBudgetSnapshots(normalized, financialReferenceMonth(normalized));
 }
 
-async function resolveState() {
+async function resolveState(requestedHouseholdId?: string | null) {
   const supabase = createClient();
-  const { data, error } = await supabase.rpc("awn_resolve_personal_household");
+  const { data, error } = await supabase.rpc("awn_resolve_active_household", { p_requested_household_id: requestedHouseholdId ?? null });
   if (error) throw repositoryError(error, "cloud_load_failed");
   const state = parseCloudStateRow(data);
   return state.profile ? { ...state, profile: normalizeCloudProfile(state.profile) } : state;
 }
 
-function parseSaveRow(data: unknown, householdName: string, memberRole: "owner" | "member", memberCount: number) {
+function parseSaveRow(data: unknown, householdName: string, memberRole: "owner" | "member", memberCount: number, isPersonal: boolean) {
   const row = (Array.isArray(data) ? data[0] : data) as SaveRow | null;
   if (!row || typeof row.household_id !== "string" || !Number.isSafeInteger(row.revision)
     || !isFinancialProfile(row.profile_data)) throw new CloudFinancialRepositoryError("invalid_cloud_financial_state", "invalid_cloud_financial_state");
@@ -51,6 +51,7 @@ function parseSaveRow(data: unknown, householdName: string, memberRole: "owner" 
     householdName,
     memberRole,
     memberCount,
+    isPersonal,
     profile: normalizeCloudProfile(row.profile_data),
     revision: Number(row.revision),
     initializedAt: typeof row.initialized_at === "string" ? row.initialized_at : null,
@@ -71,11 +72,11 @@ export async function clearCloudFinancialData(state: CloudFinancialState) {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("awn_clear_financial_data", { p_household_id: state.householdId });
   if (error) throw repositoryError(error, "financial_clear_failed");
-  return parseSaveRow(data, state.householdName, state.memberRole, state.memberCount);
+  return parseSaveRow(data, state.householdName, state.memberRole, state.memberCount, state.isPersonal);
 }
 
 export async function saveCloudFinancialProfile(
-  state: Pick<CloudFinancialState, "householdId" | "householdName" | "memberRole" | "memberCount" | "revision">,
+  state: Pick<CloudFinancialState, "householdId" | "householdName" | "memberRole" | "memberCount" | "isPersonal" | "revision">,
   profile: FinancialProfile,
   migrationIdentifier?: string,
 ) {
@@ -88,7 +89,7 @@ export async function saveCloudFinancialProfile(
     p_migration_identifier: migrationIdentifier ?? null,
   });
   if (error) throw repositoryError(error, "cloud_save_failed");
-  return parseSaveRow(data, state.householdName, state.memberRole, state.memberCount);
+  return parseSaveRow(data, state.householdName, state.memberRole, state.memberCount, state.isPersonal);
 }
 
 export async function loadFinancialImportFingerprints(householdId: string) {
@@ -99,7 +100,7 @@ export async function loadFinancialImportFingerprints(householdId: string) {
 }
 
 export async function saveCloudFinancialImport(
-  state: Pick<CloudFinancialState, "householdId" | "householdName" | "memberRole" | "memberCount" | "revision">,
+  state: Pick<CloudFinancialState, "householdId" | "householdName" | "memberRole" | "memberCount" | "isPersonal" | "revision">,
   profile: FinancialProfile,
   imports: FinancialImportRecord[],
 ) {
@@ -112,12 +113,13 @@ export async function saveCloudFinancialImport(
     p_imports: imports as unknown as Record<string, unknown>[],
   });
   if (error) throw repositoryError(error, "cloud_import_failed");
-  return parseSaveRow(data, state.householdName, state.memberRole, state.memberCount);
+  return parseSaveRow(data, state.householdName, state.memberRole, state.memberCount, state.isPersonal);
 }
 
-export async function loadCloudFinancialProfile(ownerId: string): Promise<CloudFinancialLoadResult> {
-  let cloud = await resolveState();
+export async function loadCloudFinancialProfile(ownerId: string, requestedHouseholdId?: string | null, allowLocalMigration = true): Promise<CloudFinancialLoadResult> {
+  let cloud = await resolveState(requestedHouseholdId);
   if (cloud.profile) return { ...cloud, issue: null, migratedLocalProfile: false };
+  if (!allowLocalMigration || !cloud.isPersonal || cloud.memberRole !== "owner") return { ...cloud, issue: null, migratedLocalProfile: false };
   const local = loadFinancialProfile(ownerId);
   const decision = decideInitialCloudState(cloud.profile, local.profile, local.issue);
 
@@ -130,7 +132,7 @@ export async function loadCloudFinancialProfile(ownerId: string): Promise<CloudF
     return { ...cloud, issue: null, migratedLocalProfile: true };
   } catch (error) {
     if (error instanceof CloudFinancialRepositoryError && error.code === "revision_conflict") {
-      cloud = await resolveState();
+      cloud = await resolveState(requestedHouseholdId);
       if (cloud.profile) return { ...cloud, issue: null, migratedLocalProfile: false };
     }
     throw error;

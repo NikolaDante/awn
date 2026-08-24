@@ -2,7 +2,7 @@ export const publicPaths = ["/", "/auth/sign-in", "/auth/sign-up", "/auth/forgot
 const localOrigin = "http://awn.local";
 const controlCharacters = /[\u0000-\u001f\u007f]/;
 
-export function isPublicPath(pathname: string) { return publicPaths.includes(pathname as (typeof publicPaths)[number]); }
+export function isPublicPath(pathname: string) { return publicPaths.includes(pathname as (typeof publicPaths)[number]) || pathname.startsWith("/invite/"); }
 export function isProtectedPath(pathname: string) { return !isPublicPath(pathname) && !pathname.startsWith("/_next") && !pathname.startsWith("/favicon"); }
 export function safeReturnPath(value: string | null | undefined, fallback = "/dashboard") {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return fallback;

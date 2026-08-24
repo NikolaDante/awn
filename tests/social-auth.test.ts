@@ -93,8 +93,8 @@ test("social users use the existing onboarding and Dashboard destinations", () =
   assert.match(source("components/auth-page-redirect.tsx"), /authenticatedHomeRoute\(profile\)/);
 });
 
-test("repeated social sign-in reuses the idempotent personal Household resolver", () => {
-  assert.match(source("lib/cloud-financial-repository.ts"), /rpc\("awn_resolve_personal_household"\)/);
+test("repeated social sign-in reuses personal initialization inside the active Household resolver", () => {
+  assert.match(source("lib/cloud-financial-repository.ts"), /rpc\("awn_resolve_active_household"/);
   assert.match(householdMigration, /pg_advisory_xact_lock/);
   assert.match(householdMigration, /where household\.created_by = p_user_id and household\.is_personal/);
   assert.match(householdMigration, /on conflict \(household_id, user_id\) do update set role = 'owner'/);

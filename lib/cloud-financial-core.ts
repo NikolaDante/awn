@@ -8,6 +8,7 @@ export type CloudFinancialState = {
   householdName: string;
   memberRole: "owner" | "member";
   memberCount: number;
+  isPersonal: boolean;
   profile: FinancialProfile | null;
   revision: number;
   initializedAt: string | null;
@@ -19,6 +20,7 @@ export type CloudStateRow = {
   household_name?: unknown;
   member_role?: unknown;
   member_count?: unknown;
+  is_personal?: unknown;
   profile_data?: unknown;
   revision?: unknown;
   initialized_at?: unknown;
@@ -45,6 +47,7 @@ export function parseCloudStateRow(value: unknown): CloudFinancialState {
     householdName: row.household_name,
     memberRole: row.member_role,
     memberCount: Number(row.member_count),
+    isPersonal: row.is_personal !== false,
     profile: (row.profile_data ?? null) as FinancialProfile | null,
     revision: Number(row.revision),
     initializedAt: (row.initialized_at ?? null) as string | null,

@@ -12,6 +12,8 @@ import { currencies, type Currency, type FinancialProfile } from "@/lib/financia
 import { addCustomCategory, buildFinancialExport, clearConfirmationReady, currencyNames, customCategoryRemoval, hasMeaningfulFinancialData, validPlanName } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/client";
 import { dateFormats, numberFormats, validDisplayName, type CurrencyPlacement, type DateFormat, type NumberFormat, type UserPreferences } from "@/lib/user-preferences";
+import { createHouseholdInvitation, leaveHousehold, listHouseholdInvitations, listHouseholdMembers, refreshHouseholdInvitation, removeHouseholdMember, revokeHouseholdInvitation, transferHouseholdOwnership } from "@/lib/shared-household-repository";
+import { sharedHouseholdError, type CreatedHouseholdInvitation, type HouseholdInvitationSummary, type HouseholdMemberSummary } from "@/lib/shared-households";
 
 type Tab = "plan" | "preferences" | "account" | "data";
 type Dialog = "plan-name" | "budget-cycle" | "display-name" | "email" | "password" | "clear" | null;
@@ -46,8 +48,65 @@ function PlanSettings() {
     <SettingRow label="Budget cycle" value={`Starts on day ${profile.budgetStartDay ?? 1}`} help={`Current cycle: ${formatDate(period.start)} – ${formatDate(period.end)}`} action={<button className="app-button app-button-secondary" type="button" onClick={() => setDialog("budget-cycle")}>Edit</button>} />
     <div className="settings-category-block"><div><strong>Categories</strong><small>AWN categories stay available. Custom categories can be removed only when they are unused.</small></div><div className="settings-default-categories">{AWN_CATEGORY_CATALOG.filter((group) => group.categories.length).map((group) => <div key={group.key}><b>{group.label}</b><span>{group.categories.map((category) => category.name).join(" · ")}</span></div>)}</div><div className="settings-custom-categories"><b>Custom categories</b>{custom.length ? custom.map((name) => { const safety = customCategoryRemoval(profile, name); return <div key={name}><span>{name}</span><button className="text-button" type="button" onClick={() => removeCustom(name)}>{safety.allowed ? "Delete" : "Used"}</button></div>; }) : <p>No custom categories yet.</p>}<AddCategory profile={profile} save={save} done={() => setStatus("Custom category added.")} /></div></div>
     {(status || issue) && <p className={`form-message ${issue ? "is-error" : "is-success"}`} role="status">{issue ?? status}</p>}
-  </SettingsSection>{dialog === "plan-name" && <PlanNameDialog current={householdName} close={() => setDialog(null)} save={async (name) => { const ok = await saveHouseholdName(name); if (ok) { setStatus("Plan name updated."); setDialog(null); } return ok; }} />}{dialog === "budget-cycle" && <BudgetCycleDialog profile={profile} close={() => setDialog(null)} save={async (day) => { const ok = await save({ ...profile, budgetStartDay: day }); if (ok) { setStatus("Budget cycle updated."); setDialog(null); } return ok; }} />}</>;
+  </SettingsSection><HouseholdSharing />{dialog === "plan-name" && <PlanNameDialog current={householdName} close={() => setDialog(null)} save={async (name) => { const ok = await saveHouseholdName(name); if (ok) { setStatus("Plan name updated."); setDialog(null); } return ok; }} />}{dialog === "budget-cycle" && <BudgetCycleDialog profile={profile} close={() => setDialog(null)} save={async (day) => { const ok = await save({ ...profile, budgetStartDay: day }); if (ok) { setStatus("Budget cycle updated."); setDialog(null); } return ok; }} />}</>;
 }
+
+type HouseholdAction = { kind: "remove" | "transfer"; member: HouseholdMemberSummary } | { kind: "leave" } | null;
+
+function HouseholdSharing() {
+  const router = useRouter();
+  const { activeHouseholdId, householdName, memberRole, memberCount, refreshHouseholds, switchHousehold } = useFinancialProfile();
+  const [members, setMembers] = useState<HouseholdMemberSummary[]>([]); const [invitations, setInvitations] = useState<HouseholdInvitationSummary[]>([]); const [inviteOpen, setInviteOpen] = useState(false); const [created, setCreated] = useState<CreatedHouseholdInvitation | null>(null); const [action, setAction] = useState<HouseholdAction>(null); const [busy, setBusy] = useState(false); const [status, setStatus] = useState(""); const [error, setError] = useState("");
+  const load = async () => {
+    if (!activeHouseholdId || !memberRole) return;
+    const [nextMembers, nextInvitations] = await Promise.all([listHouseholdMembers(activeHouseholdId), memberRole === "owner" ? listHouseholdInvitations(activeHouseholdId) : Promise.resolve([])]);
+    setMembers(nextMembers); setInvitations(nextInvitations);
+  };
+  useEffect(() => { let active = true; if (!activeHouseholdId || !memberRole) return; Promise.all([listHouseholdMembers(activeHouseholdId), memberRole === "owner" ? listHouseholdInvitations(activeHouseholdId) : Promise.resolve([])]).then(([nextMembers, nextInvitations]) => { if (active) { setMembers(nextMembers); setInvitations(nextInvitations); } }).catch((reason) => { if (active) setError(sharedHouseholdError(reason instanceof Error ? reason.message : "")); }); return () => { active = false; }; }, [activeHouseholdId, memberRole]);
+  if (!activeHouseholdId || !householdName || !memberRole) return null;
+  const pending = invitations.filter((item) => item.status === "pending"); const expired = invitations.filter((item) => item.status === "expired").slice(0, 1);
+  const copy = async (invitation: HouseholdInvitationSummary | CreatedHouseholdInvitation) => {
+    setBusy(true); setError("");
+    try { const link = "link" in invitation ? invitation.link : await refreshHouseholdInvitation(invitation.id); await copyText(link); setStatus("Copied"); if (!("link" in invitation)) await load(); }
+    catch (reason) { setError(sharedHouseholdError(reason instanceof Error ? reason.message : "")); }
+    finally { setBusy(false); }
+  };
+  const revoke = async (id: string) => { setBusy(true); setError(""); try { await revokeHouseholdInvitation(id); setCreated(null); setStatus("Invitation revoked."); await load(); } catch (reason) { setError(sharedHouseholdError(reason instanceof Error ? reason.message : "")); } finally { setBusy(false); } };
+  const confirm = async () => {
+    if (!action) return; setBusy(true); setError("");
+    try {
+      if (action.kind === "remove") { await removeHouseholdMember(activeHouseholdId, action.member.userId); setStatus("Member removed. Their personal Household was not changed."); }
+      if (action.kind === "transfer") { await transferHouseholdOwnership(activeHouseholdId, action.member.userId); setStatus(`Ownership transferred to ${action.member.displayName}.`); }
+      if (action.kind === "leave") { const result = await leaveHousehold(activeHouseholdId); setAction(null); await switchHousehold(result.householdId); router.replace(result.onboardingCompleted ? "/dashboard" : "/onboarding"); return; }
+      setAction(null); await refreshHouseholds(); await load();
+    } catch (reason) { setError(sharedHouseholdError(reason instanceof Error ? reason.message : "")); }
+    finally { setBusy(false); }
+  };
+  return <><SettingsSection eyebrow="Shared budgeting" title="Household sharing" description="Share this financial plan with one trusted person. Personal Households stay separate and financial data is never merged.">
+    {members.map((item) => <div className="settings-row household-member-row" key={item.userId}><div><strong>{item.displayName}{item.isCurrentUser ? " — You" : ""}</strong><span>{item.role === "owner" ? "Owner" : "Member"}</span><small>{item.email}</small></div>{memberRole === "owner" && item.role === "member" && <div className="household-row-actions"><button className="text-button" type="button" onClick={() => setAction({ kind: "transfer", member: item })}>Transfer ownership</button><button className="text-button danger-text" type="button" onClick={() => setAction({ kind: "remove", member: item })}>Remove member</button></div>}</div>)}
+    {memberRole === "owner" && pending.map((invitation) => <div className="settings-row household-invitation-row" key={invitation.id}><div><strong>Pending invitation</strong><span>{invitation.email}</span><small>Expires {formatInvitationDate(invitation.expiresAt)}</small></div><div className="household-row-actions"><button className="text-button" type="button" disabled={busy} onClick={() => copy(invitation)}>Copy link</button><button className="text-button danger-text" type="button" disabled={busy} onClick={() => revoke(invitation.id)}>Revoke</button></div></div>)}
+    {memberRole === "owner" && expired.map((invitation) => <div className="settings-row" key={invitation.id}><div><strong>Expired invitation</strong><span>{invitation.email}</span><small>Expired {formatInvitationDate(invitation.expiresAt)}</small></div></div>)}
+    {created && <div className="household-created-invite"><strong>Invitation created for:</strong><span>{created.email}</span><p>Share this secure link with the invited person.</p><button className="app-button app-button-secondary" type="button" disabled={busy} onClick={() => copy(created)}>Copy invitation link</button></div>}
+    {memberRole === "owner" ? memberCount >= 2 ? <p className="household-limit-copy">This shared plan already has two members.</p> : pending.length === 0 && <button className="app-button" type="button" onClick={() => setInviteOpen(true)}>Invite member</button> : <button className="app-button app-button-secondary" type="button" onClick={() => setAction({ kind: "leave" })}>Leave household</button>}
+    {(status || error) && <p className={`form-message ${error ? "is-error" : "is-success"}`} role="status">{error || status}</p>}
+  </SettingsSection>{inviteOpen && <InviteMemberDialog householdName={householdName} close={() => setInviteOpen(false)} create={async (email) => { try { const invitation = await createHouseholdInvitation(activeHouseholdId, email); setCreated(invitation); setStatus(`Invitation created for ${invitation.email}.`); setError(""); setInviteOpen(false); await load(); return null; } catch (reason) { return sharedHouseholdError(reason instanceof Error ? reason.message : ""); } }} />}{action && <HouseholdActionDialog action={action} busy={busy} close={() => setAction(null)} confirm={confirm} />}</>;
+}
+
+function InviteMemberDialog({ householdName, close, create }: { householdName: string; close: () => void; create: (email: string) => Promise<string | null> }) {
+  const [email, setEmail] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const submit = async () => { setBusy(true); const result = await create(email.trim()); setBusy(false); if (result) setError(result); };
+  return <ModalDialog title="Invite member" eyebrow="Household sharing" close={close} className="settings-dialog"><p>Invite one person to manage {householdName} with you. Their personal finances will remain separate.</p><label className="form-field">Email address<input type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoFocus required /></label>{error && <p className="form-message is-error" role="alert">{error}</p>}<DialogButtons close={close} save={submit} busy={busy} label="Create invitation" /></ModalDialog>;
+}
+
+function HouseholdActionDialog({ action, busy, close, confirm }: { action: Exclude<HouseholdAction, null>; busy: boolean; close: () => void; confirm: () => void }) {
+  const remove = action.kind === "remove"; const transfer = action.kind === "transfer";
+  const title = remove ? "Remove member?" : transfer ? `Transfer ownership to ${action.member.displayName}?` : "Leave household?";
+  const text = remove ? "This person will immediately lose access to this Household’s financial data. Their personal Household will not be affected." : transfer ? "They will become the owner of this Household. You will remain as a Member and the financial data will not change." : "You’ll lose access to this Household’s financial data. Your personal Household will not be affected.";
+  return <ModalDialog title={title} eyebrow="Household sharing" close={close} closeOnBackdrop={!busy} className="settings-dialog"><p>{text}</p><div className="confirm-dialog-actions"><button className="app-button app-button-secondary" type="button" disabled={busy} onClick={close}>Cancel</button><button className={`app-button${remove ? " danger-button" : ""}`} type="button" disabled={busy} onClick={confirm}>{busy ? "Please wait…" : remove ? "Remove member" : transfer ? "Transfer ownership" : "Leave household"}</button></div></ModalDialog>;
+}
+
+function formatInvitationDate(value: string) { return new Intl.DateTimeFormat("en-AE", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value)); }
+async function copyText(value: string) { if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(value); const field = document.createElement("textarea"); field.value = value; field.style.position = "fixed"; field.style.opacity = "0"; document.body.append(field); field.select(); const copied = document.execCommand("copy"); field.remove(); if (!copied) throw new Error("clipboard_unavailable"); }
 
 function AddCategory({ profile, save, done }: { profile: FinancialProfile; save: (profile: FinancialProfile) => Promise<boolean>; done: () => void }) {
   const [name, setName] = useState(""); const [error, setError] = useState("");

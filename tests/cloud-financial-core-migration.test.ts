@@ -12,6 +12,9 @@ const coreName = "20260809020000_cloud_financial_core.sql";
 const householdName = "20260822000000_household_financial_persistence.sql";
 const smsImportName = "20260823000000_fab_sms_import.sql";
 const settingsName = "20260824000000_settings_v1.sql";
+const sharedHouseholdsName = "20260824010000_shared_households.sql";
+const sharedHouseholdsRepairsName = "20260824020000_shared_households_repairs.sql";
+const sharedHouseholdsAcceptanceRepairName = "20260824030000_shared_households_acceptance_repair.sql";
 const initial = readFileSync(join(migrationsDirectory, initialName), "utf8");
 const repair = readFileSync(join(migrationsDirectory, repairName), "utf8");
 const core = readFileSync(join(migrationsDirectory, coreName), "utf8");
@@ -44,7 +47,7 @@ function functionParameters(name: string) {
 
 test("orders additive household persistence migrations after the immutable cloud foundation", () => {
   const migrationNames = readdirSync(migrationsDirectory).filter((name) => name.endsWith(".sql")).sort();
-  assert.deepEqual(migrationNames, [initialName, repairName, coreName, householdName, smsImportName, settingsName]);
+  assert.deepEqual(migrationNames, [initialName, repairName, coreName, householdName, smsImportName, settingsName, sharedHouseholdsName, sharedHouseholdsRepairsName, sharedHouseholdsAcceptanceRepairName]);
   assert.equal(createHash("sha256").update(initial).digest("hex"), "f6a1bd82ea96836e41e05113e58b13e217a4b6a4ea78617b8641ebf25df53964");
   assert.equal(createHash("sha256").update(repair).digest("hex"), "a6b798457e0eb4bfc512b41a73f1130c9291b8627bbc454abb5c5bb4dbec054d");
   assert.doesNotMatch(core, /drop\s+(table|column|constraint)|alter\s+column|truncate/i);

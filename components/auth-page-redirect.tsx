@@ -4,10 +4,15 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { FinancialProvider, useFinancialProfile } from "@/components/financial-provider";
 import { authenticatedHomeRoute } from "@/lib/onboarding";
+import { safeReturnPath } from "@/lib/auth/routing";
 
-export function AuthenticatedAuthPageRedirect({ ownerId }: { ownerId: string }) {
+export function AuthenticatedAuthPageRedirect({ ownerId, next }: { ownerId: string; next?: string | null }) {
+  const destination = safeReturnPath(next, "");
+  if (destination.startsWith("/invite/")) return <DirectAuthDestination destination={destination} />;
   return <FinancialProvider ownerId={ownerId}><AuthDestination /></FinancialProvider>;
 }
+
+function DirectAuthDestination({ destination }: { destination: string }) { const router = useRouter(); useEffect(() => { router.replace(destination); }, [destination, router]); return <main className="auth-page"><section className="auth-card" aria-busy="true"><p className="auth-intro">Returning to your invitation…</p></section></main>; }
 
 function AuthDestination() {
   const { profile, ready, issue, retry } = useFinancialProfile();
