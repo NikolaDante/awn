@@ -8,6 +8,7 @@ const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8")
 const migration = source("supabase/migrations/20260824010000_shared_households.sql");
 const repairMigration = source("supabase/migrations/20260824020000_shared_households_repairs.sql");
 const acceptanceRepairMigration = source("supabase/migrations/20260824030000_shared_households_acceptance_repair.sql");
+const transferRepairMigration = source("supabase/migrations/20260824040000_shared_household_transfer_personal_repair.sql");
 const provider = source("components/financial-provider.tsx");
 const navigation = source("components/app-navigation.tsx");
 const switcher = source("components/household-switcher.tsx");
@@ -89,6 +90,8 @@ test("membership management preserves an owner and personal fallback", () => {
   const transfer = sqlFunction("awn_transfer_household_ownership");
   assert.match(transfer, /case when membership\.user_id = v_user_id then 'member' else 'owner' end/);
   assert.match(transfer, /count\(\*\)[\s\S]*role = 'owner'\) <> 1/);
+  assert.match(transferRepairMigration, /update public\.households[\s\S]*set is_personal = false/);
+  assert.match(transferRepairMigration, /grant execute on function public\.awn_transfer_household_ownership\(uuid, uuid\) to authenticated/);
 });
 
 test("direct invitation and membership mutation stay unavailable", () => {
