@@ -41,9 +41,9 @@ test("floating phone menu contains the expected routes and active state", () => 
   assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link \{[\s\S]*?height:48px/);
   assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link \{[\s\S]*?border-radius:14px/);
   assert.match(css, /\.mobile-navigation-card \.app-nav-link > span:last-child \{[\s\S]*?display:block/);
-  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active \{[\s\S]*?background:linear-gradient\(135deg,var\(--awn-violet\),#7e75ff\)/);
-  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active:hover,[\s\S]*?\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active:focus-visible \{[\s\S]*?background:linear-gradient\(135deg,var\(--awn-violet\),#7e75ff\)/);
-  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link\.is-active svg \{[\s\S]*?color:#fff/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link:is\(\.is-active,\[aria-current="page"\]\) \{[\s\S]*?background:linear-gradient\(135deg,var\(--awn-violet\),#7e75ff\)/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link:is\(\.is-active,\[aria-current="page"\]\):hover,[\s\S]*?\.app-shell \.mobile-navigation-card \.app-nav-link:is\(\.is-active,\[aria-current="page"\]\):focus-visible \{[\s\S]*?background:linear-gradient\(135deg,var\(--awn-violet\),#7e75ff\)/);
+  assert.match(css, /\.app-shell \.mobile-navigation-card \.app-nav-link:is\(\.is-active,\[aria-current="page"\]\) svg \{[\s\S]*?color:#fff/);
 });
 
 test("floating phone menu exposes the shared sign-out action below routes", () => {

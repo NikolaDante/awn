@@ -6862,20 +6862,20 @@
     white-space:nowrap;
   }
 
-  .app-shell .mobile-navigation-card .app-nav-link.is-active {
+  .app-shell .mobile-navigation-card .app-nav-link:is(.is-active,[aria-current="page"]) {
     background:linear-gradient(135deg,var(--awn-violet),#7e75ff);
     color:#fff;
     box-shadow:0 14px 32px rgba(102,92,246,.28);
   }
 
-  .app-shell .mobile-navigation-card .app-nav-link.is-active:hover,
-  .app-shell .mobile-navigation-card .app-nav-link.is-active:focus-visible {
+  .app-shell .mobile-navigation-card .app-nav-link:is(.is-active,[aria-current="page"]):hover,
+  .app-shell .mobile-navigation-card .app-nav-link:is(.is-active,[aria-current="page"]):focus-visible {
     background:linear-gradient(135deg,var(--awn-violet),#7e75ff);
     color:#fff;
     transform:none;
   }
 
-  .app-shell .mobile-navigation-card .app-nav-link.is-active svg {
+  .app-shell .mobile-navigation-card .app-nav-link:is(.is-active,[aria-current="page"]) svg {
     color:#fff;
   }
 
