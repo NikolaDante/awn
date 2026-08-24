@@ -120,6 +120,8 @@ test("desktop and phone use one accessible Household switcher", () => {
   assert.match(navigation, /<HouseholdSwitcher mobile/);
   assert.match(switcher, /type="button"[\s\S]*aria-label=[\s\S]*aria-expanded/);
   assert.match(switcher, /role="menuitemradio"[\s\S]*aria-checked/);
+  assert.match(switcher, /!isPersonal \|\| memberCount > 1/);
+  assert.match(switcher, /!household\.isPersonal \|\| household\.memberCount > 1/);
   assert.match(switcher, /Manage household/);
 });
 
@@ -129,6 +131,7 @@ test("Settings shows only role-appropriate sharing controls", () => {
   assert.match(settings, /Remove member/);
   assert.match(settings, /Leave household/);
   assert.match(settings, /This shared plan already has two members/);
+  assert.match(settings, /aria-label="Invitation link"[\s\S]*readOnly/);
 });
 
 test("invitation auth return supports password and Google through the existing next path", () => {

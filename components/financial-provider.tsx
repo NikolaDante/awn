@@ -22,6 +22,7 @@ type FinancialContextValue = {
   householdName: string | null;
   memberRole: "owner" | "member" | null;
   memberCount: number;
+  isPersonal: boolean;
   households: HouseholdSummary[];
   ready: boolean;
   switching: boolean;
@@ -44,6 +45,7 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
   const [householdName, setHouseholdName] = useState<string | null>(null);
   const [memberRole, setMemberRole] = useState<"owner" | "member" | null>(null);
   const [memberCount, setMemberCount] = useState(0);
+  const [isPersonal, setIsPersonal] = useState(true);
   const [households, setHouseholds] = useState<HouseholdSummary[]>([]);
   const [issue, setIssue] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -62,6 +64,7 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
     setHouseholdName(result.householdName);
     setMemberRole(result.memberRole);
     setMemberCount(result.memberCount);
+    setIsPersonal(result.isPersonal);
     setIssue(result.issue);
   }, []);
 
@@ -88,6 +91,7 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
       setHouseholdName(null);
       setMemberRole(null);
       setMemberCount(0);
+      setIsPersonal(true);
       setHouseholds([]);
       setIssue(cloudFinancialIssue(error, "load"));
       setReady(true);
@@ -98,7 +102,7 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
   const switchHousehold = useCallback(async (householdId: string) => {
     if (householdId === cloudRef.current?.householdId) return true;
     setSwitching(true); setReady(false); setIssue(null);
-    cloudRef.current = null; profileRef.current = null; setProfile(null); setHouseholdName(null); setMemberRole(null); setMemberCount(0);
+    cloudRef.current = null; profileRef.current = null; setProfile(null); setHouseholdName(null); setMemberRole(null); setMemberCount(0); setIsPersonal(true);
     try {
       const [result, available] = await Promise.all([loadCloudFinancialProfile(ownerId, householdId, false), listHouseholds()]);
       applyCloudState(result); setHouseholds(available); setReady(true); return true;
@@ -208,7 +212,7 @@ export function FinancialProvider({ children, ownerId }: Readonly<{ children: Re
     catch (error) { setIssue(error instanceof Error && error.message.includes("shared_household_clear_blocked") ? "Clearing shared Household data will be available through household management." : "We couldn’t clear the financial data. Nothing was changed."); return false; }
     finally { setSaving(false); }
   }, []);
-  return <FinancialContext.Provider value={{ profile, activeHouseholdId, householdName, memberRole, memberCount, households, ready, switching, saving, issue, save, importTransactions, saveHouseholdName, clearFinancialData, switchHousehold, refreshHouseholds, retry }}>{children}</FinancialContext.Provider>;
+  return <FinancialContext.Provider value={{ profile, activeHouseholdId, householdName, memberRole, memberCount, isPersonal, households, ready, switching, saving, issue, save, importTransactions, saveHouseholdName, clearFinancialData, switchHousehold, refreshHouseholds, retry }}>{children}</FinancialContext.Provider>;
 }
 
 export function useFinancialProfile() {

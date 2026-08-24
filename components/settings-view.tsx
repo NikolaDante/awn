@@ -52,11 +52,12 @@ function PlanSettings() {
 }
 
 type HouseholdAction = { kind: "remove" | "transfer"; member: HouseholdMemberSummary } | { kind: "leave" } | null;
+type VisibleHouseholdInvitation = Pick<CreatedHouseholdInvitation, "email" | "link">;
 
 function HouseholdSharing() {
   const router = useRouter();
   const { activeHouseholdId, householdName, memberRole, memberCount, refreshHouseholds, switchHousehold } = useFinancialProfile();
-  const [members, setMembers] = useState<HouseholdMemberSummary[]>([]); const [invitations, setInvitations] = useState<HouseholdInvitationSummary[]>([]); const [inviteOpen, setInviteOpen] = useState(false); const [created, setCreated] = useState<CreatedHouseholdInvitation | null>(null); const [action, setAction] = useState<HouseholdAction>(null); const [busy, setBusy] = useState(false); const [status, setStatus] = useState(""); const [error, setError] = useState("");
+  const [members, setMembers] = useState<HouseholdMemberSummary[]>([]); const [invitations, setInvitations] = useState<HouseholdInvitationSummary[]>([]); const [inviteOpen, setInviteOpen] = useState(false); const [created, setCreated] = useState<VisibleHouseholdInvitation | null>(null); const [action, setAction] = useState<HouseholdAction>(null); const [busy, setBusy] = useState(false); const [status, setStatus] = useState(""); const [error, setError] = useState("");
   const load = async () => {
     if (!activeHouseholdId || !memberRole) return;
     const [nextMembers, nextInvitations] = await Promise.all([listHouseholdMembers(activeHouseholdId), memberRole === "owner" ? listHouseholdInvitations(activeHouseholdId) : Promise.resolve([])]);
@@ -65,9 +66,9 @@ function HouseholdSharing() {
   useEffect(() => { let active = true; if (!activeHouseholdId || !memberRole) return; Promise.all([listHouseholdMembers(activeHouseholdId), memberRole === "owner" ? listHouseholdInvitations(activeHouseholdId) : Promise.resolve([])]).then(([nextMembers, nextInvitations]) => { if (active) { setMembers(nextMembers); setInvitations(nextInvitations); } }).catch((reason) => { if (active) setError(sharedHouseholdError(reason instanceof Error ? reason.message : "")); }); return () => { active = false; }; }, [activeHouseholdId, memberRole]);
   if (!activeHouseholdId || !householdName || !memberRole) return null;
   const pending = invitations.filter((item) => item.status === "pending"); const expired = invitations.filter((item) => item.status === "expired").slice(0, 1);
-  const copy = async (invitation: HouseholdInvitationSummary | CreatedHouseholdInvitation) => {
+  const copy = async (invitation: HouseholdInvitationSummary | VisibleHouseholdInvitation) => {
     setBusy(true); setError("");
-    try { const link = "link" in invitation ? invitation.link : await refreshHouseholdInvitation(invitation.id); await copyText(link); setStatus("Copied"); if (!("link" in invitation)) await load(); }
+    try { const link = "link" in invitation ? invitation.link : await refreshHouseholdInvitation(invitation.id); if (!("link" in invitation)) setCreated({ ...invitation, link }); await copyText(link); setStatus("Copied"); if (!("link" in invitation)) await load(); }
     catch (reason) { setError(sharedHouseholdError(reason instanceof Error ? reason.message : "")); }
     finally { setBusy(false); }
   };
@@ -86,7 +87,7 @@ function HouseholdSharing() {
     {members.map((item) => <div className="settings-row household-member-row" key={item.userId}><div><strong>{item.displayName}{item.isCurrentUser ? " — You" : ""}</strong><span>{item.role === "owner" ? "Owner" : "Member"}</span><small>{item.email}</small></div>{memberRole === "owner" && item.role === "member" && <div className="household-row-actions"><button className="text-button" type="button" onClick={() => setAction({ kind: "transfer", member: item })}>Transfer ownership</button><button className="text-button danger-text" type="button" onClick={() => setAction({ kind: "remove", member: item })}>Remove member</button></div>}</div>)}
     {memberRole === "owner" && pending.map((invitation) => <div className="settings-row household-invitation-row" key={invitation.id}><div><strong>Pending invitation</strong><span>{invitation.email}</span><small>Expires {formatInvitationDate(invitation.expiresAt)}</small></div><div className="household-row-actions"><button className="text-button" type="button" disabled={busy} onClick={() => copy(invitation)}>Copy link</button><button className="text-button danger-text" type="button" disabled={busy} onClick={() => revoke(invitation.id)}>Revoke</button></div></div>)}
     {memberRole === "owner" && expired.map((invitation) => <div className="settings-row" key={invitation.id}><div><strong>Expired invitation</strong><span>{invitation.email}</span><small>Expired {formatInvitationDate(invitation.expiresAt)}</small></div></div>)}
-    {created && <div className="household-created-invite"><strong>Invitation created for:</strong><span>{created.email}</span><p>Share this secure link with the invited person.</p><button className="app-button app-button-secondary" type="button" disabled={busy} onClick={() => copy(created)}>Copy invitation link</button></div>}
+    {created && <div className="household-created-invite"><strong>Invitation created for:</strong><span>{created.email}</span><p>Share this secure link with the invited person.</p><label className="form-field">Secure invitation link<input aria-label="Invitation link" value={created.link} readOnly /></label><button className="app-button app-button-secondary" type="button" disabled={busy} onClick={() => copy(created)}>Copy invitation link</button></div>}
     {memberRole === "owner" ? memberCount >= 2 ? <p className="household-limit-copy">This shared plan already has two members.</p> : pending.length === 0 && <button className="app-button" type="button" onClick={() => setInviteOpen(true)}>Invite member</button> : <button className="app-button app-button-secondary" type="button" onClick={() => setAction({ kind: "leave" })}>Leave household</button>}
     {(status || error) && <p className={`form-message ${error ? "is-error" : "is-success"}`} role="status">{error || status}</p>}
   </SettingsSection>{inviteOpen && <InviteMemberDialog householdName={householdName} close={() => setInviteOpen(false)} create={async (email) => { try { const invitation = await createHouseholdInvitation(activeHouseholdId, email); setCreated(invitation); setStatus(`Invitation created for ${invitation.email}.`); setError(""); setInviteOpen(false); await load(); return null; } catch (reason) { return sharedHouseholdError(reason instanceof Error ? reason.message : ""); } }} />}{action && <HouseholdActionDialog action={action} busy={busy} close={() => setAction(null)} confirm={confirm} />}</>;
