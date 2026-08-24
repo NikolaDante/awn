@@ -76,6 +76,7 @@ test("empty financial states stay neutral and avoid invented insight claims", ()
   const profile = createFinancialProfile();
   assert.deepEqual(budgetSummary(profile, "2026-08", 0), { budget: null, allocated: 0, unallocated: null, spent: 0, remaining: null, percent: null, kind: "none", tone: "neutral", statusLabel: "No budget" });
   assert.match(viewsSource, /No monthly budget yet/);
+  assert.match(viewsSource, /!goals\.length\) return <EmptyPanel title="No savings goals yet" text="Start with one goal that matters to you\." action="Add savings goal"/);
   assert.match(viewsSource, /Add a budget and a few transactions to unlock meaningful insights/);
   assert.doesNotMatch(viewsSource, /comfortably on track|Every category is within budget|Spending leads this month/);
   assert.match(viewsSource, /goals\.length === 1 \? "goal" : "goals"/);
