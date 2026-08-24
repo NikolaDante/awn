@@ -17,7 +17,14 @@ export function isFinancialProfile(value: unknown): value is FinancialProfile {
     const value = item as Record<string, unknown>;
     if (typeof value.id !== "string" || !money(value.amount) || Number(value.amount) <= 0 || typeof value.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.date) || typeof value.createdAt !== "string" || typeof value.updatedAt !== "string") return false;
     if (value.type === "income") return value.destinationKind === undefined || value.destinationKind === "cash" || value.destinationKind === "account";
-    if (value.type === "expense") return typeof value.category === "string" && (value.sourceKind === undefined || ["cash", "account", "debit", "credit"].includes(String(value.sourceKind)));
+    if (value.type === "expense") {
+      const household = value.householdBudget;
+      const householdValid = household === undefined || !!household && typeof household === "object"
+        && (household as Record<string, unknown>).included === true
+        && typeof (household as Record<string, unknown>).householdId === "string"
+        && typeof (household as Record<string, unknown>).category === "string";
+      return householdValid && typeof value.category === "string" && (value.sourceKind === undefined || ["cash", "account", "debit", "credit"].includes(String(value.sourceKind)));
+    }
     if (value.type === "transfer") return value.sourceKind === undefined && typeof value.sourceAccountId === "string" && typeof value.destinationAccountId === "string" || ["cash", "account"].includes(String(value.sourceKind)) && ["cash", "account", "credit"].includes(String(value.destinationKind));
     return value.type === "card-payment" && typeof value.payingAccountId === "string" && typeof value.receivingCardId === "string";
   };

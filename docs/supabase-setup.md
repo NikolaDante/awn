@@ -14,7 +14,7 @@ Supabase is AWN’s authoritative financial persistence layer. The browser uses 
 
 - Every authenticated user automatically receives one personal `My Household` workspace and an `owner` membership. No extra onboarding screen is required.
 - Durable financial state belongs to `household_id`, not directly to an individual user. `household_members` is the authorization boundary and already supports `owner` and `member` roles.
-- The provider resolves and validates an `activeHouseholdId`. Phase 4A adds two-person Household switching, email-bound invitations, owner/member management, and lightweight Realtime refetching. Personal Households remain separate; financial merging is not supported.
+- The financial provider resolves an immutable creator-owned `privatePlanHouseholdId`; every global financial route is private. Two-person email-bound invitations and owner/member management are reused only for shared budgets, aggregate opted-in category spending, and shared savings goals. `active_household_id` is deprecated and ignored for financial authorization/context.
 - Deleting an auth user removes that user’s membership and nulls creator attribution. It does not delete a Household merely because its creator disappears. The current personal Household may consequently remain ownerless until shared-ownership lifecycle rules are added.
 
 ## Financial persistence

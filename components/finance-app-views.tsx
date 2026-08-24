@@ -10,6 +10,7 @@ import { ManageMonthlyBudgetDialog, type ManageBudgetOptions } from "@/component
 import { MoneyInput } from "@/components/money-input";
 import { ConfirmationDialog, ModalDialog } from "@/components/modal-dialog";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
+import { SharedPlanView } from "@/components/shared-plan-view";
 import { AddTransactionButton, AllTransactionsDialog, TransactionDeleteDialog, TransactionForm } from "@/components/transactions-ui";
 import { useModalDialog } from "@/components/use-modal-dialog";
 import { useUserPreferences } from "@/components/user-preferences-provider";
@@ -206,6 +207,7 @@ type PlannedCategory = CategoryBudget & { spent: number };
 export function PlanView({ initialTab = "budgets", initialAction }: { initialTab?: PlanTab; initialAction?: PlanAction }) {
   const state = useProfileState();
   const [tab, setTab] = useState<PlanTab>(initialTab);
+  const [scope, setScope] = useState<"private" | "household">("private");
   const [manageBudget, setManageBudget] = useState<ManageBudgetOptions | undefined>(initialAction === "edit-budget" ? {} : undefined);
   const [addingGoal, setAddingGoal] = useState(initialAction === "add-goal");
   const [allCategoriesOpen, setAllCategoriesOpen] = useState(false);
@@ -220,11 +222,11 @@ export function PlanView({ initialTab = "budgets", initialAction }: { initialTab
   const hasMonthlyBudget = hasOverallBudget(profile, activeMonth);
   const budgetMap = new Map(categoryBudgets.map((category) => [category.name, category]));
   const categories = [...new Set([...categoryBudgets.map((category) => category.name), ...Object.keys(categorySpending)])].map((name) => ({ id: budgetMap.get(name)?.id ?? `unbudgeted-${name}`, name, limit: budgetMap.get(name)?.limit ?? 0, month: activeMonth, spent: categorySpending[name] ?? 0 }));
-  return <><div className="segmented-control plan-tabs" role="tablist" aria-label="Plan section"><button role="tab" aria-selected={tab === "budgets"} onClick={() => setTab("budgets")}>Monthly budgets</button><button role="tab" aria-selected={tab === "savings"} onClick={() => setTab("savings")}>Savings goals</button></div>
-    {tab === "budgets" ? <MonthlyBudgetPlanner month={activeMonth} profile={profile} categories={categories} allocatedCount={categoryBudgets.length} budget={monthlyBudget} spent={spent} hasBudget={hasMonthlyBudget} manage={(options) => setManageBudget(options ?? {})} viewAll={() => setAllCategoriesOpen(true)} /> : <SavingsGoals profile={profile} goals={profile.savingsGoals} add={() => setAddingGoal(true)} />}
-    {manageBudget !== undefined && <ManageMonthlyBudgetDialog profile={profile} options={manageBudget} close={() => setManageBudget(undefined)} />}
-    {allCategoriesOpen && categoryBudgets.length > 0 && <AllPlanCategoriesDialog categories={categories} profile={profile} edit={(category) => { setAllCategoriesOpen(false); setManageBudget({ categoryId: category.id, categoryName: category.name, focusCategories: true }); }} close={() => setAllCategoriesOpen(false)} />}
-    {addingGoal && <SavingsGoalDialog profile={profile} close={() => setAddingGoal(false)} />}
+  return <><div className="plan-controls"><div className="segmented-control plan-tabs" role="tablist" aria-label="Plan section"><button role="tab" aria-selected={tab === "budgets"} onClick={() => setTab("budgets")}>Monthly budgets</button><button role="tab" aria-selected={tab === "savings"} onClick={() => setTab("savings")}>Savings goals</button></div><div className="segmented-control plan-scope-tabs" role="tablist" aria-label="Plan privacy"><button role="tab" aria-selected={scope === "private"} onClick={() => setScope("private")}>Private</button><button role="tab" aria-selected={scope === "household"} onClick={() => setScope("household")}>Household</button></div></div>
+    {scope === "household" ? <SharedPlanView tab={tab} /> : tab === "budgets" ? <MonthlyBudgetPlanner month={activeMonth} profile={profile} categories={categories} allocatedCount={categoryBudgets.length} budget={monthlyBudget} spent={spent} hasBudget={hasMonthlyBudget} manage={(options) => setManageBudget(options ?? {})} viewAll={() => setAllCategoriesOpen(true)} /> : <SavingsGoals profile={profile} goals={profile.savingsGoals} add={() => setAddingGoal(true)} />}
+    {scope === "private" && manageBudget !== undefined && <ManageMonthlyBudgetDialog profile={profile} options={manageBudget} close={() => setManageBudget(undefined)} />}
+    {scope === "private" && allCategoriesOpen && categoryBudgets.length > 0 && <AllPlanCategoriesDialog categories={categories} profile={profile} edit={(category) => { setAllCategoriesOpen(false); setManageBudget({ categoryId: category.id, categoryName: category.name, focusCategories: true }); }} close={() => setAllCategoriesOpen(false)} />}
+    {scope === "private" && addingGoal && <SavingsGoalDialog profile={profile} close={() => setAddingGoal(false)} />}
   </>;
 }
 

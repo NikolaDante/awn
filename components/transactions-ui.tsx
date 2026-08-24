@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatedMoney } from "@/components/animated-money";
 import { AppIcon } from "@/components/app-icons";
@@ -12,11 +12,13 @@ import { useModalDialog } from "@/components/use-modal-dialog";
 import { useUserPreferences } from "@/components/user-preferences-provider";
 import { budgetCategoriesForMonth, budgetSummary, categoryBudgetPosition } from "@/lib/financial-budget";
 import { calculateActualSummary, isValidDate } from "@/lib/financial-calculations";
-import { dateInBudgetPeriod, financialReferenceDate, financialReferenceMonth, financialReferencePeriod } from "@/lib/financial-date";
+import { budgetPeriodForDate, dateInBudgetPeriod, financialReferenceDate, financialReferenceMonth, financialReferencePeriod } from "@/lib/financial-date";
 import { mutateLedger, normalizeTransaction, transferValidationMessage, UNBUDGETED_CATEGORY } from "@/lib/financial-ledger";
 import { transactionHistoryLabel } from "@/lib/financial-reference-guards";
 import { filterTransactions, type TransactionFilters } from "@/lib/financial-transaction-filters";
 import { newLocalId, type FinancialProfile, type Transaction } from "@/lib/financial-types";
+import { getSharedBudget, getSharedPlan } from "@/lib/shared-planning-repository";
+import type { SharedPlan } from "@/lib/shared-planning";
 
 const initialFilters: TransactionFilters = { type: "all", title: "", category: "", account: "", date: "" };
 type UserTransactionType = "income" | "expense" | "transfer";
@@ -34,12 +36,27 @@ export function TransactionForm({ editing, close }: { editing?: Transaction; clo
   const [date, setDate] = useState(editing?.date ?? (profile ? financialReferenceDate(profile) : new Date().toLocaleDateString("en-CA")));
   const [note, setNote] = useState(editing?.note ?? "");
   const [category, setCategory] = useState(normalizedEditing?.type === "expense" ? normalizedEditing.category : "");
+  const editingHouseholdBudget = normalizedEditing?.type === "expense" ? normalizedEditing.householdBudget : undefined;
+  const [sharedPlan, setSharedPlan] = useState<SharedPlan>();
+  const [sharedCategories, setSharedCategories] = useState<string[]>([]);
+  const [includeInHousehold, setIncludeInHousehold] = useState(!!editingHouseholdBudget?.included);
+  const [householdCategory, setHouseholdCategory] = useState(editingHouseholdBudget?.category ?? category);
   const [paidFrom, setPaidFrom] = useState(normalizedEditing?.type === "expense" ? encode(normalizedEditing.sourceKind, normalizedEditing.sourceId) : "");
   const [sourceId, setSourceId] = useState(editing?.type === "income" ? editing.incomeSourceId ?? "" : "");
   const [destination, setDestination] = useState(normalizedEditing?.type === "income" ? encode(normalizedEditing.destinationKind, normalizedEditing.destinationId) : "");
   const [source, setSource] = useState(normalizedEditing?.type === "transfer" ? encode(normalizedEditing.sourceKind, normalizedEditing.sourceId) : "");
   const [target, setTarget] = useState(normalizedEditing?.type === "transfer" ? encode(normalizedEditing.destinationKind, normalizedEditing.destinationId) : "");
   const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    getSharedPlan().then(async (plan) => {
+      if (!active || plan.memberCount < 2) return;
+      const period = budgetPeriodForDate(plan.budgetStartDay, date);
+      const budget = await getSharedBudget(plan, period.key);
+      if (active) { setSharedPlan(plan); setSharedCategories(budget.categories.map((item) => item.category)); }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [date]);
   if (!profile) return null;
 
   const balances = calculateActualSummary(profile, financialReferenceMonth(profile));
@@ -55,7 +72,7 @@ export function TransactionForm({ editing, close }: { editing?: Transaction; clo
     const base = { id: editing?.id ?? newLocalId(), amount, date, note: note.trim() || undefined, createdAt: editing?.createdAt ?? now, updatedAt: now };
     let transaction: Transaction;
     if (type === "income") { const endpoint = decode(destination); transaction = { ...base, type, incomeSourceId: sourceId || undefined, incomeSourceName: profile.incomeSources.find((item) => item.id === sourceId)?.name, destinationKind: endpoint.kind as "cash" | "account", destinationId: endpoint.id }; }
-    else if (type === "expense") { const endpoint = decode(paidFrom); transaction = { ...base, type, category: category.trim() || UNBUDGETED_CATEGORY, sourceKind: endpoint.kind as "cash" | "account" | "debit" | "credit", sourceId: endpoint.id }; }
+    else if (type === "expense") { const endpoint = decode(paidFrom); const privateCategory = category.trim() || UNBUDGETED_CATEGORY; transaction = { ...base, type, category: privateCategory, sourceKind: endpoint.kind as "cash" | "account" | "debit" | "credit", sourceId: endpoint.id, householdBudget: includeInHousehold && sharedPlan ? { included: true, householdId: sharedPlan.householdId, category: householdCategory.trim() || privateCategory } : undefined }; }
     else { const from = decode(source); const to = decode(target); transaction = { ...base, type, sourceKind: from.kind as "cash" | "account", sourceId: from.id, destinationKind: to.kind as "cash" | "account" | "credit", destinationId: to.id }; }
     const result = mutateLedger(profile, editing ? { kind: "edit", transaction } : { kind: "add", transaction });
     if (!result.ok) return setError(result.error);
@@ -67,7 +84,7 @@ export function TransactionForm({ editing, close }: { editing?: Transaction; clo
     <div className="transaction-type segmented-control" role="group" aria-label="Transaction type">{(["income", "expense", "transfer"] as const).map((option) => <button type="button" key={option} className={type === option ? "is-selected" : undefined} aria-pressed={type === option} onClick={() => { setType(option); setError(""); }}>{option[0].toUpperCase() + option.slice(1)}</button>)}</div>
     <div className="transaction-form-body"><div className="transaction-fields"><label className="form-field">Amount<MoneyInput value={amount} onValueChange={setAmount} placeholder="0.00" /></label><label className="form-field">Date<input type="date" max={new Date().toLocaleDateString("en-CA")} value={date} onChange={(event) => setDate(event.target.value)} /></label>
       {type === "income" && <><label className="form-field">Income source (optional)<select value={sourceId} onChange={(event) => setSourceId(event.target.value)}><option value="">No source selected</option>{profile.incomeSources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="form-field">Received into<select value={destination} onChange={(event) => setDestination(event.target.value)}><option value="">Choose destination</option>{groupedOptions(false, false)}</select></label></>}
-      {type === "expense" && <><label className="form-field">Category (optional)<select value={category} onChange={(event) => setCategory(event.target.value)}><option value="">Choose a category</option>{category === UNBUDGETED_CATEGORY && <option value={category}>{category}</option>}<CategorySelectOptions profile={profile} currentName={category} /></select></label><label className="form-field">Paid from<select value={paidFrom} onChange={(event) => setPaidFrom(event.target.value)}><option value="">Choose source</option>{groupedOptions(true, true)}</select></label>{(profile.debitCards ?? []).some((item) => !item.linkedAccountId) && <p className="form-help transaction-field-wide">Unlinked debit cards are unavailable until they are linked to an account in Cards &amp; Accounts.</p>}</>}
+      {type === "expense" && <><label className="form-field">Category (optional)<select value={category} onChange={(event) => { setCategory(event.target.value); if (!householdCategory || householdCategory === category) setHouseholdCategory(event.target.value); }}><option value="">Choose a category</option>{category === UNBUDGETED_CATEGORY && <option value={category}>{category}</option>}<CategorySelectOptions profile={profile} currentName={category} /></select></label><label className="form-field">Paid from<select value={paidFrom} onChange={(event) => setPaidFrom(event.target.value)}><option value="">Choose source</option>{groupedOptions(true, true)}</select></label>{sharedPlan && <div className="transaction-household-option transaction-field-wide"><label className="check-row"><input type="checkbox" checked={includeInHousehold} onChange={(event) => { setIncludeInHousehold(event.target.checked); if (event.target.checked && !householdCategory) setHouseholdCategory(category || UNBUDGETED_CATEGORY); }} /><span><strong>Include in household budget</strong><small>Off by default. Only the category total and amount contribute to shared planning.</small></span></label>{includeInHousehold && <label className="form-field">Household category<input list="shared-budget-categories" value={householdCategory} maxLength={60} onChange={(event) => setHouseholdCategory(event.target.value)} /><datalist id="shared-budget-categories">{[...new Set([...sharedCategories, category].filter(Boolean))].map((name) => <option key={name} value={name} />)}</datalist></label>}</div>}{(profile.debitCards ?? []).some((item) => !item.linkedAccountId) && <p className="form-help transaction-field-wide">Unlinked debit cards are unavailable until they are linked to an account in Cards &amp; Accounts.</p>}</>}
       {type === "transfer" && <><label className="form-field">From<select value={source} onChange={(event) => setSource(event.target.value)}><option value="">Choose source</option>{groupedOptions(false, false)}</select></label><label className="form-field">To<select value={target} onChange={(event) => setTarget(event.target.value)}><option value="">Choose destination</option>{groupedOptions(false, true)}</select></label></>}
       <label className="form-field transaction-field-wide">Note (optional)<input value={note} onChange={(event) => setNote(event.target.value)} placeholder="A short note" /></label></div>{error && <p className="form-message is-error" role="alert">{error}</p>}</div>
     <div className="confirm-dialog-actions"><button type="button" className="app-button app-button-secondary" onClick={close}>Cancel</button><button type="button" className="app-button" onClick={submit}>{editing ? "Save changes" : "Add transaction"}</button></div>

@@ -63,9 +63,9 @@ function ProposalCard({ item, profile, expanded, toggle, update }: { item: SmsIm
 }
 
 export function BankSmsImportDialog({ close }: { close: () => void }) {
-  const router = useRouter(); const { profile, activeHouseholdId, importTransactions, saving } = useFinancialProfile();
+  const router = useRouter(); const { profile, privatePlanHouseholdId, importTransactions, saving } = useFinancialProfile();
   const [stage, setStage] = useState<"input" | "review" | "result">("input"); const [input, setInput] = useState(""); const [items, setItems] = useState<SmsImportReviewItem[]>([]); const [expanded, setExpanded] = useState<string | null>(null); const [fingerprints, setFingerprints] = useState<Set<string>>(new Set()); const [historyReady, setHistoryReady] = useState(false); const [error, setError] = useState(""); const [importedCount, setImportedCount] = useState(0);
-  useEffect(() => { let active = true; if (!activeHouseholdId) return; loadFinancialImportFingerprints(activeHouseholdId).then((result) => { if (active) { setFingerprints(result); setHistoryReady(true); } }).catch(() => { if (active) { setError("AWN couldn’t load your SMS import history. Try again."); setHistoryReady(true); } }); return () => { active = false; }; }, [activeHouseholdId]);
+  useEffect(() => { let active = true; if (!privatePlanHouseholdId) return; loadFinancialImportFingerprints(privatePlanHouseholdId).then((result) => { if (active) { setFingerprints(result); setHistoryReady(true); } }).catch(() => { if (active) { setError("AWN couldn’t load your SMS import history. Try again."); setHistoryReady(true); } }); return () => { active = false; }; }, [privatePlanHouseholdId]);
   const summary = useMemo(() => items.reduce((counts, item) => { const status = profile ? smsProposalReadiness(profile, item).status : item.proposal.status; if (status === "ready") counts.ready += 1; else if (status === "needs-review") counts.review += 1; else if (status === "duplicate") counts.duplicate += 1; else counts.unsupported += 1; return counts; }, { ready: 0, review: 0, duplicate: 0, unsupported: 0 }), [items, profile]);
   if (!profile) return null;
   const update = (id: string, patch: Partial<SmsImportReviewItem>) => setItems((current) => current.map((item) => item.proposal.id === id ? { ...item, ...patch } : item));

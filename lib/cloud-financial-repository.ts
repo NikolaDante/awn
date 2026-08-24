@@ -34,9 +34,9 @@ function normalizeCloudProfile(profile: FinancialProfile) {
   return normalizeBudgetSnapshots(normalized, financialReferenceMonth(normalized));
 }
 
-async function resolveState(requestedHouseholdId?: string | null) {
+async function resolveState() {
   const supabase = createClient();
-  const { data, error } = await supabase.rpc("awn_resolve_active_household", { p_requested_household_id: requestedHouseholdId ?? null });
+  const { data, error } = await supabase.rpc("awn_resolve_private_household");
   if (error) throw repositoryError(error, "cloud_load_failed");
   const state = parseCloudStateRow(data);
   return state.profile ? { ...state, profile: normalizeCloudProfile(state.profile) } : state;
@@ -116,8 +116,8 @@ export async function saveCloudFinancialImport(
   return parseSaveRow(data, state.householdName, state.memberRole, state.memberCount, state.isPersonal);
 }
 
-export async function loadCloudFinancialProfile(ownerId: string, requestedHouseholdId?: string | null, allowLocalMigration = true): Promise<CloudFinancialLoadResult> {
-  let cloud = await resolveState(requestedHouseholdId);
+export async function loadCloudFinancialProfile(ownerId: string, allowLocalMigration = true): Promise<CloudFinancialLoadResult> {
+  let cloud = await resolveState();
   if (cloud.profile) return { ...cloud, issue: null, migratedLocalProfile: false };
   if (!allowLocalMigration || !cloud.isPersonal || cloud.memberRole !== "owner") return { ...cloud, issue: null, migratedLocalProfile: false };
   const local = loadFinancialProfile(ownerId);
@@ -132,7 +132,7 @@ export async function loadCloudFinancialProfile(ownerId: string, requestedHouseh
     return { ...cloud, issue: null, migratedLocalProfile: true };
   } catch (error) {
     if (error instanceof CloudFinancialRepositoryError && error.code === "revision_conflict") {
-      cloud = await resolveState(requestedHouseholdId);
+      cloud = await resolveState();
       if (cloud.profile) return { ...cloud, issue: null, migratedLocalProfile: false };
     }
     throw error;

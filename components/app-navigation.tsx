@@ -9,7 +9,6 @@ import { BankSmsImportDialog } from "@/components/bank-sms-import";
 import { ModalDialog } from "@/components/modal-dialog";
 import { TransactionForm } from "@/components/transactions-ui";
 import { containModalFocus } from "@/components/use-modal-dialog";
-import { HouseholdSwitcher } from "@/components/household-switcher";
 
 const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
@@ -71,7 +70,6 @@ export function AppNavigation() {
           {navigation.map((item) => <AppNavLink key={item.href} href={item.href} label={item.label} icon={item.icon} active={pathname === item.href} close={closeForRoute} />)}
         </nav>
         <div className="app-sidebar-footer">
-          <HouseholdSwitcher />
           <nav aria-label="Settings navigation"><AppNavLink href="/settings" label="Settings" icon="settings" active={pathname === "/settings"} close={closeForRoute} /></nav>
           <SignOutButton />
         </div>
@@ -83,7 +81,6 @@ export function AppNavigation() {
       </div>
       {open && <button className="nav-scrim" type="button" aria-label="Close navigation" onClick={dismissMenu} />}
       {open && <section ref={mobileMenu} id="app-mobile-navigation-card" className="mobile-navigation-card" role="dialog" aria-modal="true" aria-label="Application navigation" tabIndex={-1}>
-        <HouseholdSwitcher mobile afterSelect={() => setOpen(false)} />
         <nav className="mobile-navigation-list">
           {navigation.map((item) => <AppNavLink key={item.href} href={item.href} label={item.label} icon={item.icon} active={pathname === item.href} close={closeForRoute} />)}
           <AppNavLink href="/settings" label="Settings" icon="settings" active={pathname === "/settings"} close={closeForRoute} />

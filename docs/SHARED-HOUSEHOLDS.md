@@ -1,11 +1,42 @@
-# Shared Households v1
+# Privacy-first Shared Planning
 
-AWN treats a Household as a financial plan. Shared Households v1 supports one Owner and one Member. Both can use the Household’s accounts, cards, transactions, budgets, savings goals, History, Insights, exports, and Bank SMS import. Owner-only operations are inviting or removing the Member, revoking invitations, transferring ownership, and renaming the plan.
+AWN supports one Household Owner and one Member using the existing email-bound invitation and membership system. A shared relationship provides collaborative planning, not shared financial access.
 
-Each user keeps their personal Household. Accepting an invitation only adds a membership and changes the user’s active Household; it never moves, copies, merges, or changes financial rows in either Household. The active selection is stored in `user_preferences.active_household_id`, revalidated against membership on every load, and falls back to an owned Household first.
+## Permanent privacy boundary
 
-Invitations are bound case-insensitively to the authenticated Supabase email, expire after seven days, and store only a SHA-256 token hash. Preview invitation links are manually shared from `https://awn-preview-awn4.vercel.app`; automatic transactional email is deferred. A signed-out invitee can use password or Google authentication and return to the same `/invite/<token>` route.
+Private to each user:
 
-Members may leave and immediately return to an accessible personal Household. Owners remove Members without affecting either person’s personal Household. An Owner with a Member cannot leave until ownership is transferred; transfer atomically leaves exactly one Owner and reclassifies the transferred plan as shared so the former Owner can receive a clean personal fallback if they later leave. Household deletion is not included.
+- accounts, debit cards, credit cards, and cash
+- transactions and History
+- private monthly budgets and private savings goals
+- Dashboard and Insights
+- Bank SMS imports, metadata, and fingerprints
 
-Financial state remains protected by Household-member RLS and the existing atomic profile RPC. Realtime listens only to the active Household’s profile, membership, and name changes, debounces events for 300 ms, and refetches the canonical snapshot. Switching clears the previous snapshot before loading the next Household so financial values cannot appear under the wrong name.
+Shared with the Household:
+
+- shared plan name, currency, and budget-cycle start day
+- shared overall monthly budgets and category allocations
+- aggregate, opted-in category spending
+- shared savings goals and intentional shared savings contributions
+
+**Household membership never grants access to another member’s private financial records.** Private financial RLS is based on the immutable `households.created_by` identity, not the transferable shared-management role.
+
+Dashboard, Transactions, History, Cards & Accounts, Insights, SMS import, and the Private Plan view always resolve the authenticated user’s own private plan. `user_preferences.active_household_id` is retained only for database compatibility; it is no longer a financial authorization or application-context input. There is no global Household switcher. The `Private | Household` selector exists only on Plan.
+
+## Aggregate spending
+
+Expense Add/Edit offers `Include in household budget` only when the user has a partner. It is **OFF by default**. When enabled, the user chooses a Household category. A private mapping stores the source transaction identifier, contributor, amount, shared period, and category. Only the contributor may directly select their mapping rows. Other members receive category totals through the narrow `awn_get_shared_budget_summary` security-definer RPC; it never returns transaction IDs, dates, merchants, notes, instruments, SMS metadata, or balances.
+
+Saving a private profile rebuilds that user’s mappings atomically. Amount/category edits update aggregates, disabling inclusion removes the mapping, deleting the expense removes the mapping, and clearing private data removes all of the caller’s mappings. Shared budgets and savings goals remain.
+
+## Shared savings and attribution
+
+Both members can create, edit, and delete shared goals and add shared contributions. Shared contribution records contain only amount, contributor, and time; they do not point to a private account, card, or transaction. Attribution is shown only for intentional shared actions such as a goal update or savings contribution.
+
+## Invitations and management
+
+Invitations remain case-insensitively bound to the authenticated Supabase email, expire after seven days, and store only a SHA-256 token hash. Preview links are manually shared from `https://awn-preview-awn4.vercel.app`; transactional invitation email remains deferred.
+
+Both Owner and Member may edit shared planning. Owner-only relationship operations remain invite, revoke, remove, and transfer ownership. Transfer changes shared administration only and never transfers private finances. Remove or leave revokes shared-plan access without changing either user’s private data.
+
+Realtime publishes only the shared-plan settings revision. Shared mutations and private opted-in expense changes bump that revision so the partner refetches aggregate planning data without receiving a private transaction event or payload.
