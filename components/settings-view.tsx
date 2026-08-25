@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/application-ui";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { ModalDialog } from "@/components/modal-dialog";
+import { MoneyInput } from "@/components/money-input";
 import { useUserPreferences } from "@/components/user-preferences-provider";
 import { AWN_CATEGORY_CATALOG, isDefaultCategoryName, profileCategoryNames } from "@/lib/financial-categories";
 import { budgetPeriodForDate, financialReferenceDate } from "@/lib/financial-date";
@@ -18,7 +19,7 @@ import type { SharedPlan } from "@/lib/shared-planning";
 import { sharedHouseholdError, type CreatedHouseholdInvitation, type HouseholdInvitationSummary, type HouseholdMemberSummary } from "@/lib/shared-households";
 
 type Tab = "plan" | "preferences" | "account" | "data";
-type Dialog = "plan-name" | "budget-cycle" | "display-name" | "email" | "password" | "clear" | null;
+type Dialog = "plan-name" | "budget-cycle" | "usual-income" | "display-name" | "email" | "password" | "clear" | null;
 const tabs: Array<{ id: Tab; label: string }> = [{ id: "plan", label: "Plan" }, { id: "preferences", label: "Preferences" }, { id: "account", label: "Account & Security" }, { id: "data", label: "Data & Privacy" }];
 
 export function SettingsView() {
@@ -36,7 +37,7 @@ function SettingRow({ label, value, help, action, children }: { label: string; v
 
 function PlanSettings() {
   const { profile, householdName, saving, issue, save, saveHouseholdName } = useFinancialProfile();
-  const { formatDate } = useUserPreferences();
+  const { formatDate, formatMoney } = useUserPreferences();
   const [dialog, setDialog] = useState<Dialog>(null); const [status, setStatus] = useState("");
   if (!profile || !householdName) return null;
   const meaningful = hasMeaningfulFinancialData(profile);
@@ -48,9 +49,10 @@ function PlanSettings() {
     <SettingRow label="Plan name" value={householdName} help="The private name of your financial plan." action={<button className="app-button app-button-secondary" type="button" onClick={() => setDialog("plan-name")}>Edit</button>} />
     <SettingRow label="Base currency" value={`${profile.currency} — ${currencyNames[profile.currency]}`} help={meaningful ? "Currency can’t be changed after financial activity has been recorded because AWN doesn’t convert existing amounts yet." : "Changing currency is safe while this plan is empty."}><select aria-label="Base currency" value={profile.currency} disabled={meaningful || saving} onChange={(event) => updateCurrency(event.target.value as Currency)}>{currencies.map((currency) => <option key={currency} value={currency}>{currency} — {currencyNames[currency]}</option>)}</select></SettingRow>
     <SettingRow label="Budget cycle" value={`Starts on day ${profile.budgetStartDay ?? 1}`} help={`Current cycle: ${formatDate(period.start)} – ${formatDate(period.end)}`} action={<button className="app-button app-button-secondary" type="button" onClick={() => setDialog("budget-cycle")}>Edit</button>} />
+    <SettingRow label="Usual monthly income" value={profile.usualMonthlyIncome ? formatMoney(profile.usualMonthlyIncome, profile.currency) : "Not set"} help="Optional private planning reference. It never creates income or changes a balance." action={<button className="app-button app-button-secondary" type="button" onClick={() => setDialog("usual-income")}>Edit</button>} />
     <div className="settings-category-block"><div><strong>Categories</strong><small>AWN categories stay available. Custom categories can be removed only when they are unused.</small></div><div className="settings-default-categories">{AWN_CATEGORY_CATALOG.filter((group) => group.categories.length).map((group) => <div key={group.key}><b>{group.label}</b><span>{group.categories.map((category) => category.name).join(" · ")}</span></div>)}</div><div className="settings-custom-categories"><b>Custom categories</b>{custom.length ? custom.map((name) => { const safety = customCategoryRemoval(profile, name); return <div key={name}><span>{name}</span><button className="text-button" type="button" onClick={() => removeCustom(name)}>{safety.allowed ? "Delete" : "Used"}</button></div>; }) : <p>No custom categories yet.</p>}<AddCategory profile={profile} save={save} done={() => setStatus("Custom category added.")} /></div></div>
     {(status || issue) && <p className={`form-message ${issue ? "is-error" : "is-success"}`} role="status">{issue ?? status}</p>}
-  </SettingsSection><HouseholdSharing />{dialog === "plan-name" && <PlanNameDialog current={householdName} close={() => setDialog(null)} save={async (name) => { const ok = await saveHouseholdName(name); if (ok) { setStatus("Plan name updated."); setDialog(null); } return ok; }} />}{dialog === "budget-cycle" && <BudgetCycleDialog profile={profile} close={() => setDialog(null)} save={async (day) => { const ok = await save({ ...profile, budgetStartDay: day }); if (ok) { setStatus("Budget cycle updated."); setDialog(null); } return ok; }} />}</>;
+  </SettingsSection><HouseholdSharing />{dialog === "plan-name" && <PlanNameDialog current={householdName} close={() => setDialog(null)} save={async (name) => { const ok = await saveHouseholdName(name); if (ok) { setStatus("Plan name updated."); setDialog(null); } return ok; }} />}{dialog === "budget-cycle" && <BudgetCycleDialog profile={profile} close={() => setDialog(null)} save={async (day) => { const ok = await save({ ...profile, budgetStartDay: day }); if (ok) { setStatus("Budget cycle updated."); setDialog(null); } return ok; }} />}{dialog === "usual-income" && <UsualIncomeDialog profile={profile} close={() => setDialog(null)} save={async (usualMonthlyIncome) => { const ok = await save({ ...profile, usualMonthlyIncome: usualMonthlyIncome || undefined }); if (ok) { setStatus("Usual monthly income updated."); setDialog(null); } return ok; }} />}</>;
 }
 
 type HouseholdAction = { kind: "remove" | "transfer"; member: HouseholdMemberSummary } | { kind: "leave" } | null;
@@ -127,6 +129,12 @@ function BudgetCycleDialog({ profile, close, save }: { profile: FinancialProfile
   const [value, setValue] = useState(String(profile.budgetStartDay ?? 1)); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   const submit = async () => { const day = Number(value); if (!Number.isInteger(day) || day < 1 || day > 28) return setError("Choose a budget start day from 1 to 28."); setBusy(true); await save(day); setBusy(false); };
   return <ModalDialog title="Edit budget cycle" eyebrow="Plan settings" close={close} className="settings-dialog"><label className="form-field">Start day<input inputMode="numeric" pattern="[0-9]*" value={value} onChange={(event) => { if (/^\d{0,2}$/.test(event.target.value)) setValue(event.target.value); setError(""); }} autoFocus /></label><p className="form-help">Choose day 1–28 so every month has a valid cycle.</p>{error && <p className="form-message is-error" role="alert">{error}</p>}<DialogButtons close={close} save={submit} busy={busy} label="Save budget cycle" /></ModalDialog>;
+}
+
+function UsualIncomeDialog({ profile, close, save }: { profile: FinancialProfile; close: () => void; save: (amount: number) => Promise<boolean> }) {
+  const [value, setValue] = useState(profile.usualMonthlyIncome ?? 0); const [busy, setBusy] = useState(false);
+  const submit = async () => { setBusy(true); await save(value); setBusy(false); };
+  return <ModalDialog title="Edit usual monthly income" eyebrow="Private plan" close={close} className="settings-dialog"><label className="form-field">Usual monthly income<MoneyInput value={value} onValueChange={setValue} autoFocus /></label><p className="form-help">Optional planning data only. This does not create an Income transaction or change any account balance.</p><DialogButtons close={close} save={submit} busy={busy} label="Save planning income" /></ModalDialog>;
 }
 
 function PreferenceSettings() {

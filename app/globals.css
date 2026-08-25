@@ -2897,6 +2897,7 @@
 .budget-template-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
 .budget-template-grid button { padding:14px; border-radius:14px; }
 .budget-custom-percentages,
+.budget-custom-amounts,
 .budget-guide-goals,
 .shared-default-custom { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
 .budget-guide-buckets,
@@ -3010,6 +3011,7 @@
   .budget-path-choice,
   .budget-template-grid,
   .budget-custom-percentages,
+  .budget-custom-amounts,
   .budget-guide-goals,
   .budget-guide-buckets,
   .budget-guide-review,
@@ -3024,6 +3026,25 @@
   .budget-guide-actions .text-button { order:3; grid-column:1/-1; justify-self:center; }
   .household-commitment-signal { align-items:flex-start; flex-direction:column; }
 }
+
+.onboarding-budget-path { padding:0; }
+.onboarding-budget-guide { min-width:0; }
+.onboarding-budget-guide .budget-guide { min-width:0; padding:20px; border:1px solid rgba(255,255,255,.1); border-radius:20px; background:rgba(255,255,255,.035); }
+.onboarding-budget-guide .budget-guide-step > .form-help,
+.onboarding-budget-guide .budget-guide-bucket-progress small,
+.onboarding-budget-guide .budget-guide-buckets span,
+.onboarding-budget-guide .budget-guide-review span,
+.onboarding-budget-guide .budget-guide-totals,
+.onboarding-budget-guide .section-note { color:rgba(255,255,255,.62); }
+.onboarding-budget-guide .budget-guide-buckets strong,
+.onboarding-budget-guide .budget-guide-review strong,
+.onboarding-budget-guide .budget-guide-bucket-progress strong,
+.onboarding-budget-guide .budget-guide-totals strong { color:#fff; }
+.onboarding-budget-guide .budget-guide-buckets span,
+.onboarding-budget-guide .budget-guide-review span,
+.onboarding-budget-guide .budget-guide-bucket-progress span,
+.onboarding-budget-guide .budget-guide-suggestions > div,
+.onboarding-budget-guide .budget-guide-category { border-color:rgba(255,255,255,.12); }
 
 .app-demo-badge {
   width:max-content;
@@ -7266,4 +7287,20 @@
     width:100%;
     min-height:46px;
   }
+}
+
+/* Mobile width invariant: final placement prevents legacy page/modal rules from reintroducing overflow. */
+@media (max-width:640px) {
+  html,body,.app-shell,.app-workspace,.app-page,.onboarding-page,.onboarding-header,.onboarding-card { min-width:0; max-width:100%; }
+  .app-shell,.app-workspace,.app-page,.onboarding-page { width:100%; }
+  .app-page > *,.onboarding-card > *,.content-panel,.dialog-backdrop,.confirm-dialog,.manage-budget-scroll,.budget-guide,.budget-guide-step,.settings-list,.settings-row,.summary-row,.review-card { min-width:0; max-width:100%; }
+  .app-shell input,.app-shell select,.app-shell textarea,.onboarding-page input,.onboarding-page select,.onboarding-page textarea { min-width:0; max-width:100%; }
+  .plan-controls .segmented-control button,.budget-guide-step .segmented-control button,.shared-default-split > .segmented-control button,.shared-split-editor > .segmented-control button { min-width:0; white-space:normal; }
+  .settings-tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; overflow:visible; }
+  .settings-tabs button { min-width:0; white-space:normal; }
+  .shared-default-split > .segmented-control,.shared-split-editor > .segmented-control { width:100%; max-width:100%; }
+  .summary-row > div:first-child,.settings-row > div:first-child,.review-values span,.household-created-invite,.household-created-invite input { min-width:0; overflow-wrap:anywhere; }
+  .dialog-backdrop { width:100%; }
+  .confirm-dialog,.confirm-dialog.history-category-dialog,.confirm-dialog.history-transactions-dialog,.confirm-dialog.bank-sms-dialog { width:100%; max-width:calc(100vw - 16px); }
+  .onboarding-budget-guide .budget-guide { padding:16px; }
 }

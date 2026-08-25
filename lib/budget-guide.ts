@@ -1,6 +1,7 @@
 export type BudgetTemplateKey = "balanced" | "savings-first" | "flexible" | "custom";
 export type BudgetBucket = "essentials" | "lifestyle";
 export type BudgetGuideCategory = { category: string; bucket: BudgetBucket; amount: number };
+export type BudgetCustomAmounts = { essentials: number; lifestyle: number; savings: number };
 
 export const BUDGET_TEMPLATES = {
   balanced: { label: "Balanced", essentials: 50, lifestyle: 30, savings: 20 },
@@ -26,9 +27,18 @@ export function splitMinorUnits(total: number, percentages: number[]) {
   return result;
 }
 
-export function budgetTemplateAmounts(total: number, template: BudgetTemplateKey, custom = { essentials: 50, lifestyle: 30, savings: 20 }) {
-  const percentages = template === "custom" ? custom : BUDGET_TEMPLATES[template];
-  if (percentages.essentials + percentages.lifestyle + percentages.savings !== 100) return null;
+export function customBudgetAllocation(total: number, custom: BudgetCustomAmounts) {
+  const allocated = custom.essentials + custom.lifestyle + custom.savings;
+  return { allocated, remaining: total - allocated, valid: total > 0 && allocated === total };
+}
+
+export function budgetTemplateAmounts(total: number, template: BudgetTemplateKey, custom: BudgetCustomAmounts = { essentials: 0, lifestyle: 0, savings: 0 }) {
+  if (template === "custom") {
+    if (!customBudgetAllocation(total, custom).valid) return null;
+    const percent = (amount: number) => total ? Math.round(amount * 10_000 / total) / 100 : 0;
+    return { ...custom, spending: custom.essentials + custom.lifestyle, percentages: { label: "Custom", essentials: percent(custom.essentials), lifestyle: percent(custom.lifestyle), savings: percent(custom.savings) } };
+  }
+  const percentages = BUDGET_TEMPLATES[template];
   const [essentials, lifestyle, savings] = splitMinorUnits(total, [percentages.essentials, percentages.lifestyle, percentages.savings]);
   return { essentials, lifestyle, savings, spending: essentials + lifestyle, percentages };
 }

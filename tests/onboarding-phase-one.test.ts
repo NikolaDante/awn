@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { replaceBudgetSnapshot } from "../lib/financial-budget.ts";
 import { debitAccountAvailable } from "../lib/financial-institutions.ts";
+import { ledgerBalancesAt } from "../lib/financial-ledger.ts";
 import { authenticatedFinancialRoute, budgetAllocation, budgetCycle, categoryBudgetValid, normalizeBudgetStartDayInput, normalizeSavingsTargetMonth, parseBudgetStartDayInput, removeOnboardingItem, requestedOnboardingStep, savingsTargetMonth, upsertOnboardingItem } from "../lib/onboarding.ts";
 import { isFinancialProfile } from "../lib/financial-storage-core.ts";
 import { createFinancialProfile, type Account, type CreditCard, type DebitCard, type SavingsGoal } from "../lib/financial-types.ts";
@@ -113,9 +114,31 @@ test("savings goals use optional month and year normalized to the first day", ()
 test("removal is intentional and review renders entered values rather than a blank shell", () => {
   const card: CreditCard = { id: "card", name: "Travel", limit: 500000, owed: 25000, dueDay: 5 };
   assert.deepEqual(removeOnboardingItem([card], card.id), []);
-  for (const label of ["Money setup", "Budget cycle", "Monthly plan", "Savings goals", "Starting account balances", "Current cycle"]) assert.match(onboardingSource, new RegExp(label));
+  for (const label of ["Money setup", "Planning basics", "Monthly plan", "Savings goals", "Starting account balances", "Current cycle", "Usual monthly income", "Monthly spending budget", "Savings guidance"]) assert.match(onboardingSource, new RegExp(label));
   assert.match(onboardingSource, /formatMoney\(accountBalance/);
   assert.match(onboardingSource, /formatMoney\(totalSaved/);
+});
+
+test("usual monthly income is optional private planning data and never ledger activity", () => {
+  const profile = createFinancialProfile();
+  assert.equal(profile.usualMonthlyIncome, undefined);
+  profile.accounts = [{ id: "account", name: "Everyday", type: "current", balance: 250_000 }];
+  profile.usualMonthlyIncome = 1_000_000;
+  assert.equal(isFinancialProfile(profile), true);
+  assert.deepEqual(profile.transactions, []);
+  assert.equal(ledgerBalancesAt(profile).accounts.account, 250_000);
+  assert.match(onboardingSource, /initialAmount=\{draft\.usualMonthlyIncome \?\? 0\}/);
+  assert.match(onboardingSource, /usualMonthlyIncome: usualMonthlyIncome \|\| undefined/);
+  assert.match(onboardingSource, /Build it myself[\s\S]*Help me plan/);
+  assert.match(onboardingSource, /monthlySavingsGuidance: result\.savingsGuidance/);
+});
+
+test("responsive foundations retain zoom and constrain real mobile children", () => {
+  const layout = readFileSync(join(root, "app/layout.tsx"), "utf8");
+  assert.match(layout, /export const viewport:[\s\S]*width: "device-width"[\s\S]*initialScale: 1/);
+  assert.doesNotMatch(layout, /userScalable|maximumScale/);
+  assert.match(css, /Mobile width invariant:[\s\S]*\.app-workspace[\s\S]*min-width:0[\s\S]*\.budget-guide-step \.segmented-control button/);
+  assert.match(css, /\.budget-custom-amounts[\s\S]*grid-template-columns:1fr/);
 });
 
 test("validation reserves a stable message area and positive amounts fail with specific copy", () => {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { budgetTemplateAmounts, responsibilitySplit, splitMinorUnits, suggestedBudgetBucket } from "../lib/budget-guide.ts";
+import { budgetTemplateAmounts, customBudgetAllocation, responsibilitySplit, splitMinorUnits, suggestedBudgetBucket } from "../lib/budget-guide.ts";
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
@@ -10,7 +10,10 @@ test("budget templates separate spending from savings exactly", () => {
   assert.deepEqual(budgetTemplateAmounts(1_000_000, "balanced"), { essentials: 500_000, lifestyle: 300_000, savings: 200_000, spending: 800_000, percentages: { label: "Balanced", essentials: 50, lifestyle: 30, savings: 20 } });
   assert.equal(budgetTemplateAmounts(1_000_000, "savings-first")?.spending, 700_000);
   assert.equal(budgetTemplateAmounts(1_000_000, "flexible")?.spending, 900_000);
-  assert.equal(budgetTemplateAmounts(1_000_000, "custom", { essentials: 40, lifestyle: 20, savings: 39 }), null);
+  assert.deepEqual(budgetTemplateAmounts(1_000_000, "custom", { essentials: 550_000, lifestyle: 250_000, savings: 200_000 }), { essentials: 550_000, lifestyle: 250_000, savings: 200_000, spending: 800_000, percentages: { label: "Custom", essentials: 55, lifestyle: 25, savings: 20 } });
+  assert.equal(budgetTemplateAmounts(1_000_000, "custom", { essentials: 550_000, lifestyle: 200_000, savings: 200_000 }), null);
+  assert.equal(budgetTemplateAmounts(1_000_000, "custom", { essentials: 600_000, lifestyle: 250_000, savings: 200_000 }), null);
+  assert.deepEqual(customBudgetAllocation(100_001, { essentials: 55_001, lifestyle: 25_000, savings: 20_000 }), { allocated: 100_001, remaining: 0, valid: true });
 });
 
 test("minor-unit and responsibility splits are exact and deterministic", () => {
@@ -27,6 +30,8 @@ test("category guidance is deterministic without adding a taxonomy", () => {
   assert.match(guide, /setCategories\(\[\]\)/);
   assert.match(guide, /AWN never chooses category amounts for you/);
   assert.match(guide, /Essentials target[\s\S]*Lifestyle target/);
+  assert.match(guide, /Choose money amounts that equal your planning total/);
+  assert.doesNotMatch(guide, /Custom percentages/);
 });
 
 test("guide stays client-side until its accepted draft enters the existing save flow", () => {

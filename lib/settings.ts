@@ -37,7 +37,7 @@ export function buildFinancialExport(householdName: string, profile: FinancialPr
   return {
     exportVersion: 1,
     exportedAt,
-    plan: { name: householdName, country: profile.country, baseCurrency: profile.currency, budgetStartDay: profile.budgetStartDay },
+    plan: { name: householdName, country: profile.country, baseCurrency: profile.currency, budgetStartDay: profile.budgetStartDay, usualMonthlyIncome: profile.usualMonthlyIncome, monthlySavingsGuidance: profile.monthlySavingsGuidance },
     financialData: {
       incomeSources: profile.incomeSources,
       cashBalance: profile.cashBalance ?? 0,

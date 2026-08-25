@@ -44,6 +44,10 @@ Transfer changes the Budget Admin immediately while leaving existing allocations
 
 ## Budget guide
 
-Private and Household budget editors offer a client-only guide with Balanced (50/30/20), Savings First (50/20/30), Flexible (60/30/10), and exact custom percentages. Savings is deliberately excluded from the spending budget. Category and savings-goal suggestions remain local draft state until the user accepts and saves them through the existing persistence paths. Back and Cancel do not persist a draft. The Household guide is available only to the Budget Admin and never requests a partner's income.
+Onboarding and the Private and Household budget editors reuse one client-only guide foundation. Balanced (50/30/20), Savings First (50/20/30), and Flexible (60/30/10) retain fixed percentages; Custom uses currency amounts that must reconcile exactly to the planning amount. Savings is deliberately excluded from the spending budget. Category and savings-goal suggestions remain local draft state until the user accepts and saves them through the existing persistence paths. Back and Cancel do not persist a draft.
+
+Onboarding may store an optional `usualMonthlyIncome` inside the user's private financial profile JSON. It is a planning prefill only: it creates no Income transaction, changes no account or Cash balance, and is never returned by shared-plan or member-summary RPCs. The Household guide is available only to the Budget Admin, asks only for an amount to plan together, and never requests either partner's income.
+
+At phone widths, AWN pages, cards, forms, selectors, dialogs, and sheets must resolve within the viewport after the standard mobile inset. Intrinsic form/control widths and grid or flex children must be constrained at their source; root clipping is defensive only. Responsive viewport metadata must preserve browser zoom.
 
 Realtime publishes only the shared-plan settings revision. Shared mutations and private opted-in expense changes bump that revision so the partner refetches aggregate planning data without receiving a private transaction event or payload.

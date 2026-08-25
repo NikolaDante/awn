@@ -36,6 +36,10 @@ export type FinancialProfile = {
   currency: Currency;
   /** Day 1-28 on which the user's recurring monthly budget cycle begins. */
   budgetStartDay?: number;
+  /** Optional private planning reference. Never treated as ledger income or shared-plan data. */
+  usualMonthlyIncome?: Amount;
+  /** Latest private Budget Guide savings target. Planning guidance only. */
+  monthlySavingsGuidance?: Amount;
   /** Overall monthly spending ceiling. Category budgets are optional allocations within it. */
   monthlyBudget?: Amount;
   /** Period-specific overall spending ceilings. `monthlyBudget` remains the recurring legacy fallback. */

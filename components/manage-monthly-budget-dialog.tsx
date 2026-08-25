@@ -29,6 +29,7 @@ export function ManageMonthlyBudgetDialog({ profile, close, options = {} }: { pr
   const [categories, setCategories] = useState<CategoryBudget[]>(initialCategories);
   const [mode, setMode] = useState<"choice" | "manual" | "guide">((overallBudgetForMonth(profile, month) ?? 0) > 0 || options.focusCategories || options.categoryId || options.categoryName ? "manual" : "choice");
   const [guidedGoals, setGuidedGoals] = useState<BudgetGuideGoal[]>([]);
+  const [guidedSavings, setGuidedSavings] = useState<number>();
   const [editor, setEditor] = useState<CategoryBudget | null | undefined>(initialEditor);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,14 +53,15 @@ export function ManageMonthlyBudgetDialog({ profile, close, options = {} }: { pr
     setBusy(true);
     setError("");
     const next = replaceManagedBudgetSnapshot(profile, month, overall, categories);
-    const withGoals = guidedGoals.length ? { ...next, savingsGoals: next.savingsGoals.map((goal) => ({ ...goal, contribution: guidedGoals.find((item) => item.id === goal.id)?.amount ?? goal.contribution })) } : next;
+    const withGuidance = guidedSavings === undefined ? next : { ...next, monthlySavingsGuidance: guidedSavings };
+    const withGoals = guidedGoals.length ? { ...withGuidance, savingsGoals: withGuidance.savingsGoals.map((goal) => ({ ...goal, contribution: guidedGoals.find((item) => item.id === goal.id)?.amount ?? goal.contribution })) } : withGuidance;
     if (await save(withGoals)) { close(); return; }
     setBusy(false);
     setError("We couldn’t save this monthly budget. Check your connection and try again.");
   };
 
   if (mode === "choice") return <ModalDialog title="Create monthly budget" eyebrow="Monthly plan" close={close} closeLabel="Close monthly budget manager" className="manage-budget-dialog"><div className="budget-path-choice"><button type="button" onClick={() => setMode("manual")}><AppIcon name="plan" /><strong>Build it myself</strong><span>Set an overall limit and optional categories.</span></button><button type="button" onClick={() => setMode("guide")}><AppIcon name="insights" /><strong>Help me plan</strong><span>Use a simple template and adjust every suggestion.</span></button></div></ModalDialog>;
-  if (mode === "guide") return <ModalDialog title="Budget guide" eyebrow="Monthly plan" close={close} closeLabel="Close budget guide" className="manage-budget-dialog"><div className="manage-budget-scroll"><BudgetGuide currency={profile.currency} goals={profile.savingsGoals} back={() => setMode(overall > 0 ? "manual" : "choice")} cancel={close} accept={(draft) => { setOverall(draft.overall); setCategories(draft.categories.map((item) => ({ id: newLocalId(), name: item.category, limit: item.amount, month }))); setGuidedGoals(draft.goals); setMode("manual"); }} /></div></ModalDialog>;
+  if (mode === "guide") return <ModalDialog title="Budget guide" eyebrow="Monthly plan" close={close} closeLabel="Close budget guide" className="manage-budget-dialog"><div className="manage-budget-scroll"><BudgetGuide currency={profile.currency} goals={profile.savingsGoals} initialAmount={profile.usualMonthlyIncome ?? 0} back={() => setMode(overall > 0 ? "manual" : "choice")} cancel={close} accept={(draft) => { setOverall(draft.overall); setCategories(draft.categories.map((item) => ({ id: newLocalId(), name: item.category, limit: item.amount, month }))); setGuidedGoals(draft.goals); setGuidedSavings(draft.savingsGuidance); setMode("manual"); }} /></div></ModalDialog>;
   return <ModalDialog title="Manage monthly budget" eyebrow="Monthly plan" close={close} closeLabel="Close monthly budget manager" className="manage-budget-dialog">
     <div className="manage-budget-scroll">
       <button className="app-button app-button-secondary budget-guide-launch" type="button" onClick={() => setMode("guide")}>Use budget guide</button>
