@@ -80,6 +80,9 @@ test("shared budgets and savings are collaborative while relationship management
   assert.match(settings, /plan\.role === "owner"[\s\S]*Invite partner/);
   assert.match(settings, /Transfer ownership/);
   assert.match(settings, /Private finances did not move/);
+  assert.match(settings, /lose access to the shared budgets and savings goals/);
+  assert.match(settings, /neither person’s private finances will move or change/);
+  assert.doesNotMatch(settings, /lose access to this Household’s financial data/);
 });
 
 test("invitation copy promises planning only and explicitly states privacy", () => {
