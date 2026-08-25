@@ -23,6 +23,10 @@ test("category guidance is deterministic without adding a taxonomy", () => {
   assert.equal(suggestedBudgetBucket("Rent"), "essentials");
   assert.equal(suggestedBudgetBucket("Dining Out"), "lifestyle");
   assert.equal(suggestedBudgetBucket("A custom necessity"), "essentials");
+  const guide = source("components/budget-guide.tsx");
+  assert.match(guide, /setCategories\(\[\]\)/);
+  assert.match(guide, /AWN never chooses category amounts for you/);
+  assert.match(guide, /Essentials target[\s\S]*Lifestyle target/);
 });
 
 test("guide stays client-side until its accepted draft enters the existing save flow", () => {

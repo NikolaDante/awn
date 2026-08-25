@@ -1,5 +1,3 @@
-import { DEFAULT_CATEGORY_NAMES } from "./financial-categories.ts";
-
 export type BudgetTemplateKey = "balanced" | "savings-first" | "flexible" | "custom";
 export type BudgetBucket = "essentials" | "lifestyle";
 export type BudgetGuideCategory = { category: string; bucket: BudgetBucket; amount: number };
@@ -33,13 +31,6 @@ export function budgetTemplateAmounts(total: number, template: BudgetTemplateKey
   if (percentages.essentials + percentages.lifestyle + percentages.savings !== 100) return null;
   const [essentials, lifestyle, savings] = splitMinorUnits(total, [percentages.essentials, percentages.lifestyle, percentages.savings]);
   return { essentials, lifestyle, savings, spending: essentials + lifestyle, percentages };
-}
-
-export function equalCategorySuggestions(total: number, bucket: BudgetBucket) {
-  const names = DEFAULT_CATEGORY_NAMES.filter((name) => suggestedBudgetBucket(name) === bucket)
-    .filter((name) => bucket === "essentials" ? ["Rent", "Groceries", "Utilities", "Fuel"].includes(name) : ["Dining Out", "Subscriptions", "Going Out"].includes(name));
-  const shares = splitMinorUnits(total, names.map(() => 100 / names.length));
-  return names.map((category, index) => ({ category, bucket, amount: shares[index] ?? 0 }));
 }
 
 export function responsibilitySplit(total: number, mode: "equal" | "custom", customFirst = 0) {
