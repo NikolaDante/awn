@@ -16,6 +16,7 @@ Shared with the Household:
 
 - shared plan name, currency, and budget-cycle start day
 - shared overall monthly budgets and category allocations
+- per-member category responsibility amounts and each member's opted-in aggregate spending
 - aggregate, opted-in category spending
 - shared savings goals and intentional shared savings contributions
 
@@ -25,7 +26,7 @@ Dashboard, Transactions, History, Cards & Accounts, Insights, SMS import, and th
 
 ## Aggregate spending
 
-Expense Add/Edit offers `Include in household budget` only when the user has a partner. It is **OFF by default**. When enabled, the user chooses a Household category. A private mapping stores the source transaction identifier, contributor, amount, shared period, and category. Only the contributor may directly select their mapping rows. Other members receive category totals through the narrow `awn_get_shared_budget_summary` security-definer RPC; it never returns transaction IDs, dates, merchants, notes, instruments, SMS metadata, or balances.
+Expense Add/Edit offers `Include in household budget` only when the user has a partner. It is **OFF by default**. When enabled, the user chooses a Household category. A private mapping stores the source transaction identifier, contributor, amount, shared period, and category. Only the contributor may directly select their mapping rows. Other members receive category and member totals through the narrow `awn_get_shared_budget_responsibilities` security-definer RPC; it never returns transaction IDs, dates, merchants, notes, instruments, SMS metadata, or balances.
 
 Saving a private profile rebuilds that user’s mappings atomically. Amount/category edits update aggregates, disabling inclusion removes the mapping, deleting the expense removes the mapping, and clearing private data removes all of the caller’s mappings. Shared budgets and savings goals remain.
 
@@ -37,6 +38,12 @@ Both members can create, edit, and delete shared goals and add shared contributi
 
 Invitations remain case-insensitively bound to the authenticated Supabase email, expire after seven days, and store only a SHA-256 token hash. Preview links are manually shared from `https://awn-preview-awn4.vercel.app`; transactional invitation email remains deferred.
 
-Both Owner and Member may edit shared planning. Owner-only relationship operations remain invite, revoke, remove, and transfer ownership. Transfer changes shared administration only and never transfers private finances. Remove or leave revokes shared-plan access without changing either user’s private data.
+The underlying Household Owner is labelled **Budget Admin** in the product. Only the Budget Admin can change shared-plan settings, overall/category budgets, and member responsibility splits; this is enforced by the save RPC, not only the UI. Both members can view the same aggregate plan and continue to collaborate on shared savings goals and contributions. Responsibility allocations are planning metadata: they never change balances or create transactions.
+
+Transfer changes the Budget Admin immediately while leaving existing allocations and both users' private finances unchanged. Remove or leave revokes shared-plan access without changing private data or silently reassigning responsibility. A membership change makes the current plan show `Needs adjustment` until the Budget Admin reviews valid two-member splits.
+
+## Budget guide
+
+Private and Household budget editors offer a client-only guide with Balanced (50/30/20), Savings First (50/20/30), Flexible (60/30/10), and exact custom percentages. Savings is deliberately excluded from the spending budget. Category and savings-goal suggestions remain local draft state until the user accepts and saves them through the existing persistence paths. Back and Cancel do not persist a draft. The Household guide is available only to the Budget Admin and never requests a partner's income.
 
 Realtime publishes only the shared-plan settings revision. Shared mutations and private opted-in expense changes bump that revision so the partner refetches aggregate planning data without receiving a private transaction event or payload.

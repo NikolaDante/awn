@@ -126,9 +126,9 @@ test("money drafts preserve natural sequential typing before parsing to cents", 
 });
 
 test("Plan deep links still open the intended existing workflows", () => {
-  assert.deepEqual(readPlanViewState({ tab: "savings", action: "add-goal" }), { tab: "savings", action: "add-goal" });
-  assert.deepEqual(readPlanViewState({ tab: "budgets", action: "edit-budget" }), { tab: "budgets", action: "edit-budget" });
-  assert.deepEqual(readPlanViewState({ tab: "unknown", action: "unknown" }), { tab: "budgets", action: undefined });
+  assert.deepEqual(readPlanViewState({ tab: "savings", action: "add-goal" }), { tab: "savings", action: "add-goal", scope: "private" });
+  assert.deepEqual(readPlanViewState({ tab: "budgets", action: "edit-budget" }), { tab: "budgets", action: "edit-budget", scope: "private" });
+  assert.deepEqual(readPlanViewState({ tab: "unknown", action: "unknown", scope: "household" }), { tab: "budgets", action: undefined, scope: "household" });
 });
 
 test("optional financial purposes normalize without breaking older profiles", () => {

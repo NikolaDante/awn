@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AppIcon } from "@/components/app-icons";
+import { BudgetGuide, type BudgetGuideGoal } from "@/components/budget-guide";
 import { CategoryBudgetForm } from "@/components/category-budget-form";
 import { useFinancialProfile } from "@/components/financial-provider";
 import { ModalDialog } from "@/components/modal-dialog";
@@ -26,6 +27,8 @@ export function ManageMonthlyBudgetDialog({ profile, close, options = {} }: { pr
   };
   const [overall, setOverall] = useState(overallBudgetForMonth(profile, month) ?? 0);
   const [categories, setCategories] = useState<CategoryBudget[]>(initialCategories);
+  const [mode, setMode] = useState<"choice" | "manual" | "guide">((overallBudgetForMonth(profile, month) ?? 0) > 0 || options.focusCategories || options.categoryId || options.categoryName ? "manual" : "choice");
+  const [guidedGoals, setGuidedGoals] = useState<BudgetGuideGoal[]>([]);
   const [editor, setEditor] = useState<CategoryBudget | null | undefined>(initialEditor);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,13 +51,18 @@ export function ManageMonthlyBudgetDialog({ profile, close, options = {} }: { pr
     if (categories.some((category) => !category.name.trim() || category.limit <= 0)) return setError("Every category allocation needs a name and a monthly limit above zero.");
     setBusy(true);
     setError("");
-    if (await save(replaceManagedBudgetSnapshot(profile, month, overall, categories))) { close(); return; }
+    const next = replaceManagedBudgetSnapshot(profile, month, overall, categories);
+    const withGoals = guidedGoals.length ? { ...next, savingsGoals: next.savingsGoals.map((goal) => ({ ...goal, contribution: guidedGoals.find((item) => item.id === goal.id)?.amount ?? goal.contribution })) } : next;
+    if (await save(withGoals)) { close(); return; }
     setBusy(false);
     setError("We couldn’t save this monthly budget. Check your connection and try again.");
   };
 
+  if (mode === "choice") return <ModalDialog title="Create monthly budget" eyebrow="Monthly plan" close={close} closeLabel="Close monthly budget manager" className="manage-budget-dialog"><div className="budget-path-choice"><button type="button" onClick={() => setMode("manual")}><AppIcon name="plan" /><strong>Build it myself</strong><span>Set an overall limit and optional categories.</span></button><button type="button" onClick={() => setMode("guide")}><AppIcon name="insights" /><strong>Help me plan</strong><span>Use a simple template and adjust every suggestion.</span></button></div></ModalDialog>;
+  if (mode === "guide") return <ModalDialog title="Budget guide" eyebrow="Monthly plan" close={close} closeLabel="Close budget guide" className="manage-budget-dialog"><div className="manage-budget-scroll"><BudgetGuide currency={profile.currency} goals={profile.savingsGoals} back={() => setMode(overall > 0 ? "manual" : "choice")} cancel={close} accept={(draft) => { setOverall(draft.overall); setCategories(draft.categories.map((item) => ({ id: newLocalId(), name: item.category, limit: item.amount, month }))); setGuidedGoals(draft.goals); setMode("manual"); }} /></div></ModalDialog>;
   return <ModalDialog title="Manage monthly budget" eyebrow="Monthly plan" close={close} closeLabel="Close monthly budget manager" className="manage-budget-dialog">
     <div className="manage-budget-scroll">
+      <button className="app-button app-button-secondary budget-guide-launch" type="button" onClick={() => setMode("guide")}>Use budget guide</button>
       <label className="form-field">Overall monthly budget<MoneyInput value={overall} onValueChange={(value) => { setOverall(value); setError(""); }} placeholder="0.00" aria-invalid={!!error && overall <= 0} /></label>
       <p className="form-help">This is your total spending limit. Category allocations are optional and stay unchanged unless you edit them below.</p>
       <div className="budget-manager-summary" aria-label="Budget allocation summary"><span>Overall budget<strong>{formatMoney(overall, profile.currency)}</strong></span><span>Allocated<strong>{formatMoney(allocation.allocated, profile.currency)}</strong></span><span>Unallocated<strong className={allocation.unallocated < 0 ? "negative" : undefined}>{formatMoney(allocation.unallocated, profile.currency)}</strong></span></div>

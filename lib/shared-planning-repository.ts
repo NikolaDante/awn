@@ -19,12 +19,14 @@ export async function updateSharedPlanSettings(plan: SharedPlan, values: { name:
 }
 
 export async function getSharedBudget(plan: SharedPlan, periodKey: string) {
-  return parseSharedBudget(await rpc("awn_get_shared_budget_summary", { p_household_id: plan.householdId, p_period_key: periodKey }), periodKey);
+  return parseSharedBudget(await rpc("awn_get_shared_budget_responsibilities", { p_household_id: plan.householdId, p_period_key: periodKey }), periodKey);
 }
 
-export async function saveSharedBudget(plan: SharedPlan, periodKey: string, overallBudget: number, allocations: Array<{ category: string; amount: number }>) {
+export type SharedBudgetSaveAllocation = { category: string; amount: number; members: Array<{ userId: string; amount: number }> };
+export async function saveSharedBudget(plan: SharedPlan, periodKey: string, overallBudget: number, allocations: SharedBudgetSaveAllocation[], defaultSplit: { mode: "equal" | "custom"; primaryUserId: string; primaryPercent: number }) {
   await rpc("awn_save_shared_budget", { p_household_id: plan.householdId, p_period_key: periodKey,
-    p_overall_budget_minor: overallBudget, p_allocations: allocations });
+    p_overall_budget_minor: overallBudget, p_allocations: allocations, p_default_split_mode: defaultSplit.mode,
+    p_default_primary_user_id: defaultSplit.primaryUserId, p_default_primary_percent: defaultSplit.primaryPercent });
 }
 
 export async function getSharedSavingsGoals(plan: SharedPlan) {

@@ -7,6 +7,7 @@ import { parseSharedBudget, parseSharedPlan, parseSharedSavingsGoals } from "../
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 const migration = source("supabase/migrations/20260825000000_privacy_first_shared_planning.sql");
+const responsibilities = source("supabase/migrations/20260825010000_shared_budget_responsibilities.sql");
 const provider = source("components/financial-provider.tsx");
 const repository = source("lib/cloud-financial-repository.ts");
 const navigation = source("components/app-navigation.tsx");
@@ -24,7 +25,7 @@ test("member summaries and invitation previews remain narrow", () => {
 
 test("shared planning parsers discard unexpected private fields", () => {
   assert.deepEqual(parseSharedPlan([{ household_id: "h", shared_plan_name: "Together", member_role: "owner", member_count: 2, currency: "AED", budget_start_day: 1, revision: 4, updated_at: "2026-08-24T00:00:00Z", account_balance: 999 }]), { householdId: "h", name: "Together", role: "owner", memberCount: 2, currency: "AED", budgetStartDay: 1, revision: 4, updatedAt: "2026-08-24T00:00:00Z" });
-  assert.deepEqual(parseSharedBudget([{ period_key: "2026-08", overall_budget_minor: 200000, total_spent_minor: 35000, category: "Groceries", allocated_minor: 100000, spent_minor: 35000, updated_by_name: "Nikola", updated_at: "2026-08-24T00:00:00Z", source_private_transaction_id: "must-not-pass" }], "2026-08"), { periodKey: "2026-08", overallBudget: 200000, totalSpent: 35000, categories: [{ category: "Groceries", allocated: 100000, spent: 35000 }], updatedBy: "Nikola", updatedAt: "2026-08-24T00:00:00Z" });
+  assert.deepEqual(parseSharedBudget([{ period_key: "2026-08", overall_budget_minor: 200000, total_spent_minor: 35000, category: "Groceries", allocated_minor: 100000, spent_minor: 35000, member_user_id: "a", member_name: "Nikola", member_role: "owner", member_allocated_minor: 70000, member_spent_minor: 30000, current_user_id: "a", default_split_mode: "custom", default_primary_user_id: "a", default_primary_percent: 70, responsibility_ready: true, updated_by_name: "Nikola", updated_at: "2026-08-24T00:00:00Z", source_private_transaction_id: "must-not-pass" }], "2026-08"), { periodKey: "2026-08", overallBudget: 200000, totalSpent: 35000, categories: [{ category: "Groceries", allocated: 100000, spent: 35000, members: [{ userId: "a", name: "Nikola", role: "owner", allocated: 70000, spent: 30000 }] }], members: [{ userId: "a", name: "Nikola", role: "owner", allocated: 70000, spent: 30000 }], currentUserId: "a", defaultSplit: { mode: "custom", primaryUserId: "a", primaryPercent: 70 }, responsibilityReady: true, updatedBy: "Nikola", updatedAt: "2026-08-24T00:00:00Z" });
   assert.equal(parseSharedSavingsGoals([{ goal_id: "g", name: "Holiday", target_minor: 1000000, saved_minor: 150000, planned_contribution_minor: 10000, target_date: "2027-06-01", priority: 1, updated_by_name: "Ana", updated_at: "2026-08-24T00:00:00Z", latest_contribution_minor: 50000, latest_contribution_by: "Ana", latest_contribution_at: "2026-08-24T00:00:00Z", account_id: "private" }])[0]?.latestContribution?.addedBy, "Ana");
 });
 
@@ -73,8 +74,11 @@ test("private save atomically rebuilds contribution mappings for edit and delete
   assert.match(migration, /shared_planning_member_departure/);
 });
 
-test("shared budgets and savings are collaborative while relationship management stays owner-only", () => {
-  assert.match(migration, /awn_save_shared_budget[\s\S]*awn_is_household_member/);
+test("shared budget structure is Budget Admin-only while savings remain collaborative", () => {
+  assert.match(responsibilities, /awn_save_shared_budget[\s\S]*awn_is_household_owner/);
+  assert.match(responsibilities, /invalid_shared_budget_split/);
+  assert.match(responsibilities, /shared_budget_member_allocations/);
+  assert.match(sharedPlan, /Only the Budget Admin can change the shared budget structure/);
   assert.match(migration, /awn_save_shared_savings_goal[\s\S]*awn_is_household_member/);
   assert.match(migration, /awn_add_shared_savings_contribution[\s\S]*created_by_user_id/);
   assert.match(settings, /plan\.role === "owner"[\s\S]*Invite partner/);

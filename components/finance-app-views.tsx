@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppIcon } from "@/components/app-icons";
 import { AnimatedMoney } from "@/components/animated-money";
 import { AssetCreationWorkflow } from "@/components/cards-accounts-view";
@@ -20,7 +20,10 @@ import { budgetPeriodForDate, budgetPeriodForKey, dateInBudgetPeriod, financialR
 import { profileSavingsGoalStatus } from "@/lib/financial-goal-status";
 import { deleteSavingsGoal, savingsGoalTotals, upsertSavingsGoal } from "@/lib/financial-savings";
 import { transactionHistoryLabel } from "@/lib/financial-reference-guards";
-import { type PlanAction, type PlanTab } from "@/lib/financial-navigation";
+import { getSharedBudget, getSharedPlan } from "@/lib/shared-planning-repository";
+import type { SharedBudgetSummary, SharedPlan } from "@/lib/shared-planning";
+import { createClient } from "@/lib/supabase/client";
+import { type PlanAction, type PlanScope, type PlanTab } from "@/lib/financial-navigation";
 import { type CategoryBudget, type FinancialProfile, type SavingsGoal, type Transaction } from "@/lib/financial-types";
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
@@ -116,6 +119,7 @@ export function DashboardView() {
     {budgetWorkflowOpen && <ManageMonthlyBudgetDialog profile={profile} close={() => setBudgetWorkflowOpen(false)} />}
     {goalWorkflowOpen && <SavingsGoalDialog profile={profile} close={() => setGoalWorkflowOpen(false)} />}
     <section className="hero-balance"><div><p className="app-eyebrow">Money available</p><h2><AnimatedMoney value={available} currency={profile.currency} /></h2><p>Accounts plus cash you own. Credit debt stays separate.</p></div><div className="hero-balance-side"><span className={budgetHero.statusLabel === null ? "is-no-budget" : undefined}>{budgetHero.label}<strong className={budget.kind === "over" ? "negative" : ""}>{budgetHero.valueLabel ?? formatMoney(budgetHero.amount ?? 0, profile.currency)}</strong></span>{budgetHero.statusLabel && <Status value={budget.tone} label={budgetHero.statusLabel} />}</div></section>
+    <HouseholdCommitmentSignal />
     <section className="metric-grid" aria-label="Budget-period summary">
       <Metric label="Income this period" value={formatMoney(actual.income, profile.currency)} detail={period.label} tone="green" icon="income" />
       <Metric label="Spent this period" value={formatMoney(actual.expenses, profile.currency)} detail={period.label} tone="coral" icon="expense" />
@@ -128,6 +132,16 @@ export function DashboardView() {
     </section>
     <section className="quick-actions"><div><p className="app-eyebrow">Quick actions</p><h2>What would you like to do?</h2></div><div className="quick-action-list"><AddTransactionButton /><button className="quick-action" type="button" onClick={() => setAssetWorkflowOpen(true)}><AppIcon name="wallet" />Add account/card</button><button className="quick-action" type="button" onClick={() => setBudgetWorkflowOpen(true)}><AppIcon name="plan" />{budget.kind === "none" ? "Add budget" : "Edit budget"}</button><button className="quick-action" type="button" onClick={() => setGoalWorkflowOpen(true)}><AppIcon name="plus" />Add savings goal</button></div></section>
   </>;
+}
+
+function HouseholdCommitmentSignal() {
+  const { formatMoney } = useUserPreferences(); const [plan, setPlan] = useState<SharedPlan>(); const [budget, setBudget] = useState<SharedBudgetSummary>(); const [revision, setRevision] = useState(0);
+  useEffect(() => { let active = true; const load = async () => { try { const nextPlan = await getSharedPlan(); if (nextPlan.memberCount < 2) return; const period = budgetPeriodForDate(nextPlan.budgetStartDay, new Date().toLocaleDateString("en-CA")); const nextBudget = await getSharedBudget(nextPlan, period.key); if (active) { setPlan(nextPlan); setBudget(nextBudget); } } catch { /* Supporting signal stays absent when shared planning is unavailable. */ } }; void load(); return () => { active = false; }; }, [revision]);
+  useEffect(() => { if (!plan?.householdId) return; const supabase = createClient(); const channel = supabase.channel(`awn-dashboard-shared-${plan.householdId}`).on("postgres_changes", { event: "*", schema: "public", table: "shared_plan_settings", filter: `household_id=eq.${plan.householdId}` }, () => setRevision((value) => value + 1)).subscribe(); return () => { void supabase.removeChannel(channel); }; }, [plan?.householdId]);
+  const member = budget?.members.find((item) => item.userId === budget.currentUserId);
+  if (!plan || !budget?.overallBudget || !member) return null;
+  const difference = member.allocated - member.spent;
+  return <section className="household-commitment-signal" aria-label="Your Household budget commitment"><div><p className="app-eyebrow">Your Household commitment</p><span>Allocated <strong>{formatMoney(member.allocated, plan.currency)}</strong></span><span>Spent <strong>{formatMoney(member.spent, plan.currency)}</strong></span><span>{difference < 0 ? "Over" : "Remaining"} <strong className={difference < 0 ? "negative" : undefined}>{formatMoney(Math.abs(difference), plan.currency)}</strong></span></div><Link href="/plan?scope=household">View household plan <AppIcon name="arrow" /></Link></section>;
 }
 
 function Metric({ label, value, detail, tone = "default", icon, valueClassName }: { label: string; value: string; detail: string; tone?: "default" | "green" | "coral" | "blue"; icon?: "income" | "expense" | "transactions" | "wallet"; valueClassName?: string }) {
@@ -204,10 +218,10 @@ function AddItemCard({ label, href, onClick }: { label: string; href?: string; o
 
 type PlannedCategory = CategoryBudget & { spent: number };
 
-export function PlanView({ initialTab = "budgets", initialAction }: { initialTab?: PlanTab; initialAction?: PlanAction }) {
+export function PlanView({ initialTab = "budgets", initialAction, initialScope = "private" }: { initialTab?: PlanTab; initialAction?: PlanAction; initialScope?: PlanScope }) {
   const state = useProfileState();
   const [tab, setTab] = useState<PlanTab>(initialTab);
-  const [scope, setScope] = useState<"private" | "household">("private");
+  const [scope, setScope] = useState<PlanScope>(initialScope);
   const [manageBudget, setManageBudget] = useState<ManageBudgetOptions | undefined>(initialAction === "edit-budget" ? {} : undefined);
   const [addingGoal, setAddingGoal] = useState(initialAction === "add-goal");
   const [allCategoriesOpen, setAllCategoriesOpen] = useState(false);
