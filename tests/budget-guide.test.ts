@@ -36,9 +36,11 @@ test("guide stays client-side until its accepted draft enters the existing save 
 
 test("responsibility RLS, ownership transfer semantics, and outsider denial are server enforced", () => {
   const migration = source("supabase/migrations/20260825010000_shared_budget_responsibilities.sql");
+  const repair = source("supabase/migrations/20260825020000_shared_budget_responsibility_save_repair.sql");
   assert.match(migration, /Members select shared budget responsibilities[\s\S]*awn_is_household_member/);
   assert.match(migration, /awn_save_shared_budget[\s\S]*awn_is_household_owner/);
   assert.match(migration, /count\(\*\).*<>2/);
   assert.match(migration, /count\(distinct member->>'userId'\).*<>2/);
   assert.match(migration, /sum\(\(member->>'amount'\)::bigint\).*<>v_amount/);
+  assert.match(repair, /select 1 from jsonb_array_elements\(p_allocations\)[\s\S]*group by lower/i);
 });
