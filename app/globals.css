@@ -2832,6 +2832,11 @@
   min-height:330px;
 }
 
+.shared-household-gate {
+  max-width:680px;
+  margin:0 auto;
+}
+
 .shared-allocation-editor {
   display:grid;
   grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;

@@ -17,6 +17,7 @@ import { mutateLedger, normalizeTransaction, transferValidationMessage, UNBUDGET
 import { transactionHistoryLabel } from "@/lib/financial-reference-guards";
 import { filterTransactions, type TransactionFilters } from "@/lib/financial-transaction-filters";
 import { newLocalId, type FinancialProfile, type Transaction } from "@/lib/financial-types";
+import { SHARED_HOUSEHOLD_ENABLED } from "@/lib/features";
 import { getSharedBudget, getSharedPlan } from "@/lib/shared-planning-repository";
 import type { SharedPlan } from "@/lib/shared-planning";
 
@@ -48,6 +49,7 @@ export function TransactionForm({ editing, close }: { editing?: Transaction; clo
   const [target, setTarget] = useState(normalizedEditing?.type === "transfer" ? encode(normalizedEditing.destinationKind, normalizedEditing.destinationId) : "");
   const [error, setError] = useState("");
   useEffect(() => {
+    if (!SHARED_HOUSEHOLD_ENABLED) return;
     let active = true;
     getSharedPlan().then(async (plan) => {
       if (!active || plan.memberCount < 2) return;
@@ -72,7 +74,11 @@ export function TransactionForm({ editing, close }: { editing?: Transaction; clo
     const base = { id: editing?.id ?? newLocalId(), amount, date, note: note.trim() || undefined, createdAt: editing?.createdAt ?? now, updatedAt: now };
     let transaction: Transaction;
     if (type === "income") { const endpoint = decode(destination); transaction = { ...base, type, incomeSourceId: sourceId || undefined, incomeSourceName: profile.incomeSources.find((item) => item.id === sourceId)?.name, destinationKind: endpoint.kind as "cash" | "account", destinationId: endpoint.id }; }
-    else if (type === "expense") { const endpoint = decode(paidFrom); const privateCategory = category.trim() || UNBUDGETED_CATEGORY; transaction = { ...base, type, category: privateCategory, sourceKind: endpoint.kind as "cash" | "account" | "debit" | "credit", sourceId: endpoint.id, householdBudget: includeInHousehold && sharedPlan ? { included: true, householdId: sharedPlan.householdId, category: householdCategory.trim() || privateCategory } : undefined }; }
+    else if (type === "expense") {
+      const endpoint = decode(paidFrom); const privateCategory = category.trim() || UNBUDGETED_CATEGORY;
+      const householdBudget = SHARED_HOUSEHOLD_ENABLED ? includeInHousehold && sharedPlan ? { included: true as const, householdId: sharedPlan.householdId, category: householdCategory.trim() || privateCategory } : undefined : editingHouseholdBudget;
+      transaction = { ...base, type, category: privateCategory, sourceKind: endpoint.kind as "cash" | "account" | "debit" | "credit", sourceId: endpoint.id, householdBudget };
+    }
     else { const from = decode(source); const to = decode(target); transaction = { ...base, type, sourceKind: from.kind as "cash" | "account", sourceId: from.id, destinationKind: to.kind as "cash" | "account" | "credit", destinationId: to.id }; }
     const result = mutateLedger(profile, editing ? { kind: "edit", transaction } : { kind: "add", transaction });
     if (!result.ok) return setError(result.error);

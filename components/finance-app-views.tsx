@@ -20,6 +20,7 @@ import { budgetPeriodForDate, budgetPeriodForKey, dateInBudgetPeriod, financialR
 import { profileSavingsGoalStatus } from "@/lib/financial-goal-status";
 import { deleteSavingsGoal, savingsGoalTotals, upsertSavingsGoal } from "@/lib/financial-savings";
 import { transactionHistoryLabel } from "@/lib/financial-reference-guards";
+import { SHARED_HOUSEHOLD_ENABLED } from "@/lib/features";
 import { getSharedBudget, getSharedPlan } from "@/lib/shared-planning-repository";
 import type { SharedBudgetSummary, SharedPlan } from "@/lib/shared-planning";
 import { createClient } from "@/lib/supabase/client";
@@ -119,7 +120,7 @@ export function DashboardView() {
     {budgetWorkflowOpen && <ManageMonthlyBudgetDialog profile={profile} close={() => setBudgetWorkflowOpen(false)} />}
     {goalWorkflowOpen && <SavingsGoalDialog profile={profile} close={() => setGoalWorkflowOpen(false)} />}
     <section className="hero-balance"><div><p className="app-eyebrow">Money available</p><h2><AnimatedMoney value={available} currency={profile.currency} /></h2><p>Accounts plus cash you own. Credit debt stays separate.</p></div><div className="hero-balance-side"><span className={budgetHero.statusLabel === null ? "is-no-budget" : undefined}>{budgetHero.label}<strong className={budget.kind === "over" ? "negative" : ""}>{budgetHero.valueLabel ?? formatMoney(budgetHero.amount ?? 0, profile.currency)}</strong></span>{budgetHero.statusLabel && <Status value={budget.tone} label={budgetHero.statusLabel} />}</div></section>
-    <HouseholdCommitmentSignal />
+    {SHARED_HOUSEHOLD_ENABLED && <HouseholdCommitmentSignal />}
     <section className="metric-grid" aria-label="Budget-period summary">
       <Metric label="Income this period" value={formatMoney(actual.income, profile.currency)} detail={period.label} tone="green" icon="income" />
       <Metric label="Spent this period" value={formatMoney(actual.expenses, profile.currency)} detail={period.label} tone="coral" icon="expense" />
@@ -237,11 +238,15 @@ export function PlanView({ initialTab = "budgets", initialAction, initialScope =
   const budgetMap = new Map(categoryBudgets.map((category) => [category.name, category]));
   const categories = [...new Set([...categoryBudgets.map((category) => category.name), ...Object.keys(categorySpending)])].map((name) => ({ id: budgetMap.get(name)?.id ?? `unbudgeted-${name}`, name, limit: budgetMap.get(name)?.limit ?? 0, month: activeMonth, spent: categorySpending[name] ?? 0 }));
   return <><div className="plan-controls"><div className="segmented-control plan-tabs" role="tablist" aria-label="Plan section"><button role="tab" aria-selected={tab === "budgets"} onClick={() => setTab("budgets")}>Monthly budgets</button><button role="tab" aria-selected={tab === "savings"} onClick={() => setTab("savings")}>Savings goals</button></div><div className="segmented-control plan-scope-tabs" role="tablist" aria-label="Plan privacy"><button role="tab" aria-selected={scope === "private"} onClick={() => setScope("private")}>Private</button><button role="tab" aria-selected={scope === "household"} onClick={() => setScope("household")}>Household</button></div></div>
-    {scope === "household" ? <SharedPlanView tab={tab} /> : tab === "budgets" ? <MonthlyBudgetPlanner month={activeMonth} profile={profile} categories={categories} allocatedCount={categoryBudgets.length} budget={monthlyBudget} spent={spent} hasBudget={hasMonthlyBudget} manage={(options) => setManageBudget(options ?? {})} viewAll={() => setAllCategoriesOpen(true)} /> : <SavingsGoals profile={profile} goals={profile.savingsGoals} add={() => setAddingGoal(true)} />}
+    {scope === "household" ? SHARED_HOUSEHOLD_ENABLED ? <SharedPlanView tab={tab} /> : <SharedHouseholdComingSoon /> : tab === "budgets" ? <MonthlyBudgetPlanner month={activeMonth} profile={profile} categories={categories} allocatedCount={categoryBudgets.length} budget={monthlyBudget} spent={spent} hasBudget={hasMonthlyBudget} manage={(options) => setManageBudget(options ?? {})} viewAll={() => setAllCategoriesOpen(true)} /> : <SavingsGoals profile={profile} goals={profile.savingsGoals} add={() => setAddingGoal(true)} />}
     {scope === "private" && manageBudget !== undefined && <ManageMonthlyBudgetDialog profile={profile} options={manageBudget} close={() => setManageBudget(undefined)} />}
     {scope === "private" && allCategoriesOpen && categoryBudgets.length > 0 && <AllPlanCategoriesDialog categories={categories} profile={profile} edit={(category) => { setAllCategoriesOpen(false); setManageBudget({ categoryId: category.id, categoryName: category.name, focusCategories: true }); }} close={() => setAllCategoriesOpen(false)} />}
     {scope === "private" && addingGoal && <SavingsGoalDialog profile={profile} close={() => setAddingGoal(false)} />}
   </>;
+}
+
+function SharedHouseholdComingSoon() {
+  return <section className="empty-panel shared-household-gate"><span className="empty-panel-mark" aria-hidden="true"><AppIcon name="plan" /></span><h2>Shared household coming soon</h2><p>We’re working on a simpler way to plan together while keeping personal finances private.</p></section>;
 }
 
 function orderedPlanCategories(categories: PlannedCategory[]) {

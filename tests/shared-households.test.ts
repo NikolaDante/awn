@@ -17,6 +17,8 @@ const transactions = source("components/transactions-ui.tsx");
 const settings = source("components/settings-view.tsx");
 const invite = source("components/household-invitation-view.tsx");
 const budgetGuide = source("components/budget-guide.tsx");
+const features = source("lib/features.ts");
+const smsImport = source("components/bank-sms-import.tsx");
 
 test("member summaries and invitation previews remain narrow", () => {
   assert.deepEqual(parseHouseholdMembers([{ user_id: "a", display_name: "Ana", email: "ana@example.com", role: "member", is_current_user: true, balance: 999 }]), [{ userId: "a", displayName: "Ana", email: "ana@example.com", role: "member", isCurrentUser: true }]);
@@ -55,23 +57,41 @@ test("private provider ignores active Household selection and contains no switch
   assert.match(migration, /longer a financial authorization or routing input/);
 });
 
-test("Plan is the only private/Household planning switch", () => {
+test("Plan keeps the private/Household switch but gates the shared UI", () => {
   assert.match(plan, /aria-label="Plan privacy"/);
   assert.match(plan, />Private</);
   assert.match(plan, />Household</);
-  assert.match(plan, /<SharedPlanView tab=\{tab\}/);
+  assert.match(features, /SHARED_HOUSEHOLD_ENABLED = false/);
+  assert.match(plan, /SHARED_HOUSEHOLD_ENABLED \? <SharedPlanView tab=\{tab\} \/> : <SharedHouseholdComingSoon \/>/);
+  assert.match(plan, /Shared household coming soon/);
+  assert.match(plan, /simpler way to plan together while keeping personal finances private/);
   assert.match(sharedPlan, /Your accounts and transactions stay private\. Only shared planning totals are visible here\./);
   assert.match(sharedPlan, /Plan together with someone/);
 });
 
-test("expense Household inclusion is optional, aggregate-only, and off by default", () => {
+test("expense Household inclusion remains implemented but hidden while gated", () => {
   assert.match(transactions, /useState\(!!editingHouseholdBudget\?\.included\)/);
+  assert.match(transactions, /if \(!SHARED_HOUSEHOLD_ENABLED\) return/);
   assert.match(transactions, /Include in household budget/);
   assert.match(transactions, /Only the category total and amount contribute to shared planning/);
-  assert.match(transactions, /householdBudget: includeInHousehold && sharedPlan/);
+  assert.match(transactions, /SHARED_HOUSEHOLD_ENABLED \? includeInHousehold && sharedPlan/);
+  assert.match(transactions, /: editingHouseholdBudget/);
   assert.match(migration, /Contributors select only own private mappings[\s\S]*contributed_by_user_id = auth\.uid\(\)/);
   const aggregate = migration.match(/create or replace function public\.awn_get_shared_budget_summary[\s\S]*?\nend;\n\$\$;/)?.[0] ?? "";
   assert.doesNotMatch(aggregate, /source_private_transaction_id|note|merchant|account_id|card_id|sms/i);
+});
+
+test("shared Household user-facing surfaces are gated without deleting the implementation", () => {
+  assert.match(settings, /SHARED_HOUSEHOLD_ENABLED && <HouseholdSharing \/>/);
+  assert.match(plan, /SHARED_HOUSEHOLD_ENABLED && <HouseholdCommitmentSignal \/>/);
+  assert.doesNotMatch(smsImport, /Include in household budget|Household category|shared budget/i);
+  assert.match(sharedPlan, /Create shared budget/);
+  assert.match(sharedPlan, /Add shared savings goal/);
+  assert.match(settings, /function HouseholdSharing\(\)/);
+  assert.match(settings, /Invite partner/);
+  assert.match(settings, /Transfer ownership/);
+  assert.match(settings, /Leave household/);
+  assert.match(source("docs/SHARED-HOUSEHOLDS.md"), /currently paused behind a product UI gate/);
 });
 
 test("private save atomically rebuilds contribution mappings for edit and delete", () => {

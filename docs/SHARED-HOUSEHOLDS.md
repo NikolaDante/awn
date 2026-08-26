@@ -2,6 +2,8 @@
 
 AWN supports one Household Owner and one Member using the existing email-bound invitation and membership system. A shared relationship provides collaborative planning, not shared financial access.
 
+Shared Household is currently paused behind a product UI gate while the private-vs-shared expense and budget model is refined. The database schema, RLS policies, RPCs, invitations, memberships, shared budgets, member allocations, shared savings goals, and contribution mappings remain intact for future reactivation; normal users see only a coming-soon placeholder in Plan and no shared controls in Settings, Dashboard, transaction forms, onboarding, or SMS import.
+
 ## Permanent privacy boundary
 
 Private to each user:
