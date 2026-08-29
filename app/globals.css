@@ -7299,7 +7299,8 @@
   html,body,.app-shell,.app-workspace,.app-page,.onboarding-page,.onboarding-header,.onboarding-card { min-width:0; max-width:100%; }
   .app-shell,.app-workspace,.app-page,.onboarding-page { width:100%; }
   .app-page > *,.onboarding-card > *,.content-panel,.dialog-backdrop,.confirm-dialog,.manage-budget-scroll,.budget-guide,.budget-guide-step,.settings-list,.settings-row,.summary-row,.review-card { min-width:0; max-width:100%; }
-  .app-shell input,.app-shell select,.app-shell textarea,.onboarding-page input,.onboarding-page select,.onboarding-page textarea,.auth-page input,.auth-page select,.auth-page textarea { min-width:0; max-width:100%; font-size:16px!important; }
+  .app-shell input,.app-shell select,.app-shell textarea,.onboarding-page input,.onboarding-page select,.onboarding-page textarea,.auth-page input,.auth-page select,.auth-page textarea { min-width:0; max-width:100%; }
+  input,select,textarea { font-size:16px!important; }
   .plan-controls .segmented-control button,.budget-guide-step .segmented-control button,.shared-default-split > .segmented-control button,.shared-split-editor > .segmented-control button { min-width:0; white-space:normal; }
   .settings-tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(48px,auto)); width:100%; max-width:100%; overflow:visible; }
   .settings-tabs button { display:grid; place-items:center; width:100%; min-width:0; min-height:48px; height:100%; padding:8px 10px; line-height:1.25; text-align:center; white-space:normal; }

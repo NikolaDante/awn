@@ -91,6 +91,12 @@ test("phone transaction and SMS dialogs use constrained bottom-sheet geometry", 
   assert.match(sms, /sms-import-footer/);
 });
 
+test("phone-native controls stay at 16px even when a modal is portalled outside the app shell", () => {
+  const mobileInvariant = css.slice(css.lastIndexOf("/* Mobile width invariant:"));
+  assert.match(mobileInvariant, /@media \(max-width:640px\)/);
+  assert.match(mobileInvariant, /input,select,textarea \{ font-size:16px!important; \}/);
+});
+
 test("Add Transaction mobile sheet shares one content inset", () => {
   assert.match(css, /--transaction-mobile-inset:20px/);
   assert.match(css, /\.transaction-form > \.transaction-form-header \{[\s\S]*?padding:22px var\(--transaction-mobile-inset\) 16px/);

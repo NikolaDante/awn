@@ -140,7 +140,7 @@ test("responsive foundations use the requested locked viewport and constrain rea
   assert.match(layout, /userScalable: false/);
   assert.match(css, /Mobile width invariant:[\s\S]*\.app-workspace[\s\S]*min-width:0[\s\S]*\.budget-guide-step \.segmented-control button/);
   assert.match(css, /\.budget-custom-amounts[\s\S]*grid-template-columns:1fr/);
-  assert.match(css, /\.auth-page input[^}]*font-size:16px!important/);
+  assert.match(css, /@media \(max-width:640px\)[\s\S]*input,select,textarea \{ font-size:16px!important; \}/);
   assert.match(css, /\.onboarding-page \.savings-goal-fields[^}]*width:100%/);
   assert.match(css, /\.onboarding-page \.savings-goal-fields,[\s\S]*grid-template-columns:minmax\(0,1fr\)/);
 });
