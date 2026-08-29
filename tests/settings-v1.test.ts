@@ -87,6 +87,14 @@ test("Settings stays inside the persistent authenticated shell and exposes acces
   assert.match(layout, /<UserPreferencesProvider[^]*<FinancialProvider/);
 });
 
+test("phone Settings tabs are an equal two-by-two grid without intrinsic-width overflow", () => {
+  const styles = source("app/globals.css");
+  const mobileInvariant = styles.slice(styles.lastIndexOf("/* Mobile width invariant:"));
+  assert.match(mobileInvariant, /@media \(max-width:640px\)/);
+  assert.match(mobileInvariant, /\.settings-tabs \{[^}]*display:grid;[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\);[^}]*grid-template-rows:repeat\(2,minmax\(48px,auto\)\);[^}]*width:100%;[^}]*max-width:100%;[^}]*overflow:visible;/);
+  assert.match(mobileInvariant, /\.settings-tabs button \{[^}]*place-items:center;[^}]*width:100%;[^}]*min-width:0;[^}]*min-height:48px;[^}]*text-align:center;[^}]*white-space:normal;/);
+});
+
 test("main authenticated financial surfaces consume the shared user formatter", () => {
   for (const path of ["components/finance-app-views.tsx", "components/transactions-ui.tsx", "components/cards-accounts-view.tsx", "components/manage-monthly-budget-dialog.tsx", "components/animated-money.tsx"]) assert.match(source(path), /useUserPreferences/);
   const settings = source("components/settings-view.tsx");

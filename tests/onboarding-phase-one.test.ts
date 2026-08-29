@@ -133,18 +133,23 @@ test("usual monthly income is optional private planning data and never ledger ac
   assert.match(onboardingSource, /monthlySavingsGuidance: result\.savingsGuidance/);
 });
 
-test("responsive foundations retain zoom and constrain real mobile children", () => {
+test("responsive foundations use the requested locked viewport and constrain real mobile children", () => {
   const layout = readFileSync(join(root, "app/layout.tsx"), "utf8");
   assert.match(layout, /export const viewport:[\s\S]*width: "device-width"[\s\S]*initialScale: 1/);
-  assert.doesNotMatch(layout, /userScalable|maximumScale/);
+  assert.match(layout, /maximumScale: 1/);
+  assert.match(layout, /userScalable: false/);
   assert.match(css, /Mobile width invariant:[\s\S]*\.app-workspace[\s\S]*min-width:0[\s\S]*\.budget-guide-step \.segmented-control button/);
   assert.match(css, /\.budget-custom-amounts[\s\S]*grid-template-columns:1fr/);
+  assert.match(css, /\.auth-page input[^}]*font-size:16px!important/);
+  assert.match(css, /\.onboarding-page \.savings-goal-fields[^}]*width:100%/);
+  assert.match(css, /\.onboarding-page \.savings-goal-fields,[\s\S]*grid-template-columns:minmax\(0,1fr\)/);
 });
 
 test("validation reserves a stable message area and positive amounts fail with specific copy", () => {
   const fieldSource = readFileSync(join(root, "components/form-field.tsx"), "utf8");
   const styles = readFileSync(join(root, "app/globals.css"), "utf8");
   assert.match(fieldSource, /field-message-slot/);
+  assert.match(fieldSource, /field-label-text/);
   assert.match(styles, /stable-form-field \.field-message-slot[\s\S]*min-height/);
   assert.match(financialItemSource, /Credit limit must be above zero/);
   assert.match(categoryBudgetSource, /Monthly limit must be above zero/);

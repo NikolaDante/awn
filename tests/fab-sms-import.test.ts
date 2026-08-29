@@ -298,12 +298,62 @@ test("the importer uses the shared modal, cloud import RPC, and enabled Dashboar
   assert.match(repository, /awn_import_financial_transactions/); assert.match(repository, /financial_import_fingerprints/);
 });
 
-test("the migration enforces Household-scoped uniqueness and keeps tombstones outside transaction deletion", () => {
-  const migration = readFileSync(join(process.cwd(), "supabase/migrations/20260823000000_fab_sms_import.sql"), "utf8");
-  assert.match(migration, /primary key \(household_id, fingerprint\)/);
-  assert.match(migration, /private\.awn_is_household_member\(household_id\)/);
-  assert.match(migration, /revoke all on table public\.financial_import_fingerprints/);
-  assert.match(migration, /awn_save_financial_state\(p_household_id, p_expected_revision, p_profile_data, null\)/);
-  assert.doesNotMatch(migration, /delete from public\.financial_import_fingerprints/);
-  assert.match(migration, /message = 'import_duplicate'/);
+test("SMS duplicate state follows the live imported transaction lifecycle", () => {
+  const base = profile();
+  const parsedPurchase = parseFabSms(purchase)[0];
+  const parsedSalary = parseFabSms(salary)[0];
+  const fingerprint = parsedPurchase.fingerprint;
+
+  assert.equal(prepareSmsReview(base, [parsedPurchase], new Set())[0].proposal.status, "ready", "A: first import is ready");
+  const imported = applySmsImportBatch(base, prepareSmsReview(base, [parsedPurchase], new Set()));
+  assert.equal(imported.ok, true);
+  if (!imported.ok) return;
+  const activeFingerprints = new Set([fingerprint]);
+  assert.equal(prepareSmsReview(imported.profile, [parsedPurchase], activeFingerprints)[0].proposal.status, "duplicate", "B: saved import blocks re-import");
+
+  const importedTransaction = imported.profile.transactions[0];
+  assert.equal(importedTransaction.type, "expense");
+  if (importedTransaction.type !== "expense") return;
+  const edited = mutateLedger(imported.profile, { kind: "edit", transaction: { ...importedTransaction, amount: 7_500, category: "Other (Unbudgeted)", note: "Edited SMS import" } });
+  assert.equal(edited.ok, true);
+  if (!edited.ok) return;
+  assert.equal(edited.profile.transactions[0].import?.fingerprint, fingerprint);
+  assert.equal(prepareSmsReview(edited.profile, [parsedPurchase], activeFingerprints)[0].proposal.status, "duplicate", "C: editing retains duplicate protection");
+
+  const deleted = mutateLedger(edited.profile, { kind: "delete", id: importedTransaction.id });
+  assert.equal(deleted.ok, true);
+  if (!deleted.ok) return;
+  assert.equal(prepareSmsReview(deleted.profile, [parsedPurchase], new Set())[0].proposal.status, "ready", "D: deletion releases the fingerprint");
+  const reimported = applySmsImportBatch(deleted.profile, prepareSmsReview(deleted.profile, [parsedPurchase], new Set()));
+  assert.equal(reimported.ok, true);
+  assert.equal(prepareSmsReview(reimported.ok ? reimported.profile : deleted.profile, [parsedPurchase], activeFingerprints)[0].proposal.status, "duplicate", "E: saving again restores duplicate protection");
+  assert.equal(prepareSmsReview(deleted.profile, [parsedSalary], activeFingerprints)[0].proposal.status, "ready", "H: another SMS remains independent");
+  assert.notEqual(prepareSmsReview(createFinancialProfile(), [parsedPurchase], new Set())[0].proposal.status, "duplicate", "G: cleared data has no stale duplicate");
+  assert.equal(prepareSmsReview(base, [parsedPurchase], activeFingerprints)[0].proposal.status, "duplicate", "I: owner A sees its duplicate");
+  assert.equal(prepareSmsReview(base, [parsedPurchase], new Set())[0].proposal.status, "ready", "I: owner B is isolated");
+
+  const manualTransaction = { id: "manual-expense", type: "expense" as const, amount: 500, date: "2026-08-05", category: "Other (Unbudgeted)", sourceKind: "cash" as const, createdAt: "2026-08-05T00:00:00.000Z", updatedAt: "2026-08-05T00:00:00.000Z" };
+  const withManual = mutateLedger(imported.profile, { kind: "add", transaction: manualTransaction });
+  assert.equal(withManual.ok, true);
+  if (!withManual.ok) return;
+  const manualDeleted = mutateLedger(withManual.profile, { kind: "delete", id: manualTransaction.id });
+  assert.equal(manualDeleted.ok, true);
+  if (!manualDeleted.ok) return;
+  assert.equal(manualDeleted.profile.transactions.find((transaction) => transaction.id === importedTransaction.id)?.import?.fingerprint, fingerprint);
+  assert.equal(prepareSmsReview(manualDeleted.profile, [parsedPurchase], activeFingerprints)[0].proposal.status, "duplicate", "F: deleting a manual transaction does not release an active import");
+});
+
+test("the additive migration keeps Household uniqueness but releases only orphaned SMS fingerprints atomically", () => {
+  const original = readFileSync(join(process.cwd(), "supabase/migrations/20260823000000_fab_sms_import.sql"), "utf8");
+  const release = readFileSync(join(process.cwd(), "supabase/migrations/20260829000000_release_deleted_sms_import_fingerprints.sql"), "utf8");
+  assert.match(original, /primary key \(household_id, fingerprint\)/);
+  assert.match(original, /revoke all on table public\.financial_import_fingerprints/);
+  assert.match(original, /message = 'import_duplicate'/);
+  assert.match(release, /after update of profile_data on public\.financial_profiles/);
+  assert.match(release, /fingerprint\.household_id = new\.household_id/);
+  assert.match(release, /transaction_data->>'id' = fingerprint\.transaction_id/);
+  assert.match(release, /transaction_data->'import'->>'origin' = 'sms'/);
+  assert.match(release, /transaction_data->'import'->>'fingerprint' = fingerprint\.fingerprint/);
+  assert.match(release, /revoke all on function private\.awn_release_orphaned_import_fingerprints\(\) from public, anon, authenticated/);
+  assert.doesNotMatch(release, /drop table|truncate|delete from public\.transactions|delete from public\.financial_profiles/i);
 });
