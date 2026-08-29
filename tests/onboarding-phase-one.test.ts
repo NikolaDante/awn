@@ -143,6 +143,7 @@ test("responsive foundations use the requested locked viewport and constrain rea
   assert.match(css, /@media \(max-width:640px\)[\s\S]*input,select,textarea \{ font-size:16px!important; \}/);
   assert.match(css, /\.onboarding-page \.savings-goal-fields[^}]*width:100%/);
   assert.match(css, /\.onboarding-page \.savings-goal-fields,[\s\S]*grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /\.onboarding-page \.form-field select \{[^}]*height:46px;[^}]*min-height:46px/);
 });
 
 test("validation reserves a stable message area and positive amounts fail with specific copy", () => {
