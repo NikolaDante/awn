@@ -144,7 +144,8 @@ test("responsive foundations use the requested locked viewport and constrain rea
   assert.match(css, /\.onboarding-page \.savings-goal-fields[^}]*width:100%/);
   assert.match(css, /\.onboarding-page \.savings-goal-fields,[\s\S]*grid-template-columns:minmax\(0,1fr\)/);
   assert.match(css, /\.onboarding-page \.form-field select \{[^}]*width:100%;[^}]*min-width:0;[^}]*max-width:100%;[^}]*height:46px;[^}]*min-height:46px;[^}]*box-sizing:border-box/);
-  assert.match(css, /\.onboarding-page input\[type="month"\]/);
+  assert.match(css, /\.onboarding-page input\[type="month"\] \{[^}]*appearance:none;[^}]*-webkit-appearance:none;[^}]*max-height:46px;[^}]*line-height:24px/);
+  assert.match(css, /\.onboarding-page input\[type="month"\]::-webkit-date-and-time-value,[\s\S]*::-webkit-datetime-edit-fields-wrapper \{[^}]*height:24px;[^}]*line-height:24px;[^}]*padding:0/);
 });
 
 test("validation reserves a stable message area and positive amounts fail with specific copy", () => {
