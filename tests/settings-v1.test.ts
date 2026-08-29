@@ -87,12 +87,13 @@ test("Settings stays inside the persistent authenticated shell and exposes acces
   assert.match(layout, /<UserPreferencesProvider[^]*<FinancialProvider/);
 });
 
-test("phone Settings tabs are an equal two-by-two grid without intrinsic-width overflow", () => {
+test("phone Settings tabs are a compact balanced two-by-two segmented control", () => {
   const styles = source("app/globals.css");
   const mobileInvariant = styles.slice(styles.lastIndexOf("/* Mobile width invariant:"));
   assert.match(mobileInvariant, /@media \(max-width:640px\)/);
-  assert.match(mobileInvariant, /\.settings-tabs \{[^}]*display:grid;[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\);[^}]*grid-template-rows:repeat\(2,minmax\(48px,auto\)\);[^}]*width:100%;[^}]*max-width:100%;[^}]*overflow:visible;/);
-  assert.match(mobileInvariant, /\.settings-tabs button \{[^}]*place-items:center;[^}]*width:100%;[^}]*min-width:0;[^}]*min-height:48px;[^}]*text-align:center;[^}]*white-space:normal;/);
+  assert.match(mobileInvariant, /\.settings-tabs \{[^}]*display:grid;[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\);[^}]*grid-template-rows:repeat\(2,44px\);[^}]*gap:3px;[^}]*margin-bottom:18px;[^}]*padding:3px;[^}]*border-radius:16px;/);
+  assert.match(mobileInvariant, /\.settings-tabs button \{[^}]*place-items:center;[^}]*width:100%;[^}]*min-width:0;[^}]*height:44px;[^}]*padding:6px 8px;[^}]*border-radius:13px;[^}]*text-align:center;[^}]*white-space:normal;/);
+  assert.match(mobileInvariant, /\.settings-tabs button\.is-active \{[^}]*box-shadow:0 8px 20px rgba\(16,20,24,\.075\);/);
 });
 
 test("main authenticated financial surfaces consume the shared user formatter", () => {
